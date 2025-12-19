@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#ffffff" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <title>Tu Vida en Semanas</title>
+
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <style>
+    * {
+      -webkit-tap-highlight-color: transparent;
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    input { -webkit-user-select: text; user-select: text; }
+
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      overflow-x: hidden;
+      background: #fff;
+      /* Evita el “100vh bug” en móviles */
+      min-height: 100dvh;
+    }
+
+    #root {
+      min-height: 100dvh;
+    }
+
+    /* Un poco de aire para notch / barras */
+    .safe-bottom {
+      padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useEffect, useMemo, useRef, useState } = React;
+
+    // ====== Iconos (simples) ======
+    const SettingsIcon = () => (
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+        <circle cx="12" cy="12" r="3"></circle>
+        <path d="M12 1v6m0 6v6m-9-9h6m6 0h6"></path>
+      </svg>
+    );
+
+    const XIcon = () => (
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+        <line x1="18" y1="6" x2="6" y2="18"></line>
+        <line x1="6" y1="6" x2="18" y2="18"></line>
+      </svg>
+    );
+
+    const SunIcon = () => (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+        <circle cx="12" cy="12" r="5"></circle>
+        <line x1="12" y1="1" x2="12" y2="3"></line>
+        <line x1="12" y1="21" x2="12" y2="23"></line>
+        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      </svg>
+    );
+
+    const MoonIcon = () => (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+      </svg>
+    );
+
+    const SparklesIcon = () => (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+        <path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z"></path>
+      </svg>
+    );
+
+    const DropletsIcon = () => (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+        <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path>
+      </svg>
+    );
+
+    // ====== Storage seguro (WebView / APK wrappers) ======
+    const STORAGE = {
+      birthdate: "wol_birthdate",
+      theme: "wol_theme",
+      design: "wol_design",
+    };
+
+    function safeGet(key) {
+      try { return localStorage.getItem(key); } catch { return null; }
+    }
+    function safeSet(key, value) {
+      try { localStorage.setItem(key, value); } catch {}
+    }
+    function safeRemove(key) {
+      try { localStorage.removeItem(key); } catch {}
+    }
+
+    // ====== Helpers de fecha (evita desfases) ======
+    function parseISODateToLocalMidnight(iso) {
+      // iso: "YYYY-MM-DD"
+      const parts = (iso || "").split("-");
+      if (parts.length !== 3) return null;
+      const y = Number(parts[0]);
+      const m = Number(parts[1]);
+      const d = Number(parts[2]);
+      if (!y || !m || !d) return null;
+
+      // Local time, midnight (no UTC parsing)
+      const dt = new Date(y, m - 1, d, 0, 0, 0, 0);
+      if (Number.isNaN(dt.getTime())) return null;
+      return dt;
+    }
+
+    function clamp(n, a, b) {
+      return Math.min(b, Math.max(a, n));
+    }
+
+    // ====== Temas (clases + hex para SVG) ======
+    const THEMES = {
+      minimal: {
+        label: "Minimal",
+        bg: "bg-white",
+        text: "text-gray-900",
+        textSecondary: "text-gray-600",
+        card: "bg-gray-50",
+        border: "border-gray-200",
+        accent: "bg-gray-900",
+        accentHover: "hover:bg-gray-800",
+        track: "bg-gray-200",
+        // Hex para render (SVG + styles)
+        hex: {
+          text: "#111827",
+          textSecondary: "#4b5563",
+          weekPast: "#111827",
+          weekFuture: "#e5e7eb",
+          weekCurrent: "#3b82f6",
+          accent: "#111827",
+          track: "#e5e7eb",
+        },
+      },
+      dark: {
+        label: "Oscuro",
+        bg: "bg-gray-950",
+        text: "text-gray-100",
+        textSecondary: "text-gray-400",
+        card: "bg-gray-900",
+        border: "border-gray-800",
+        accent: "bg-purple-600",
+        accentHover: "hover:bg-purple-700",
+        track: "bg-gray-800",
+        hex: {
+          text: "#f3f4f6",
+          textSecondary: "#9ca3af",
+          weekPast: "#a855f7",
+          weekFuture: "#1f2937",
+          weekCurrent: "#06b6d4",
+          accent: "#7c3aed",
+          track: "#1f2937",
+        },
+      },
+      warm: {
+        label: "Cálido",
+        bg: "bg-amber-50",
+        text: "text-amber-950",
+        textSecondary: "text-amber-700",
+        card: "bg-amber-100",
+        border: "border-amber-300",
+        accent: "bg-orange-600",
+        accentHover: "hover:bg-orange-700",
+        track: "bg-amber-200",
+        hex: {
+          text: "#451a03",
+          textSecondary: "#b45309",
+          weekPast: "#ea580c",
+          weekFuture: "#fde68a",
+          weekCurrent: "#ef4444",
+          accent: "#ea580c",
+          track: "#fde68a",
+        },
+      },
+      ocean: {
+        label: "Océano",
+        bg: "bg-sky-50",
+        text: "text-slate-900",
+        textSecondary: "text-slate-600",
+        card: "bg-sky-100",
+        border: "border-sky-300",
+        accent: "bg-blue-600",
+        accentHover: "hover:bg-blue-700",
+        track: "bg-sky-200",
+        hex: {
+          text: "#0f172a",
+          textSecondary: "#475569",
+          weekPast: "#2563eb",
+          weekFuture: "#bae6fd",
+          weekCurrent: "#14b8a6",
+          accent: "#2563eb",
+          track: "#bae6fd",
+        },
+      },
+    };
+
+    function WeeksOfLife() {
+      const [birthdate, setBirthdate] = useState("");
+      const [tempBirthdate, setTempBirthdate] = useState("");
+      const [stats, setStats] = useState(null);
+      const [showSettings, setShowSettings] = useState(false);
+      const [theme, setTheme] = useState("minimal");
+      const [design, setDesign] = useState("grid");
+      const [error, setError] = useState("");
+
+      // Carga inicial
+      useEffect(() => {
+        const savedBirthdate = safeGet(STORAGE.birthdate);
+        const savedTheme = safeGet(STORAGE.theme);
+        const savedDesign = safeGet(STORAGE.design);
+
+        if (savedTheme && THEMES[savedTheme]) setTheme(savedTheme);
+        if (savedDesign) setDesign(savedDesign);
+
+        if (savedBirthdate) {
+          setBirthdate(savedBirthdate);
+          const s = calculateStats(savedBirthdate);
+          setStats(s);
+        }
+      }, []);
+
+      // Recalcular (por si cambia día/semana) cada 1h
+      useEffect(() => {
+        if (!birthdate) return;
+        const tick = () => setStats(calculateStats(birthdate));
+        tick();
+        const id = setInterval(tick, 1000 * 60 * 60);
+        return () => clearInterval(id);
+      }, [birthdate]);
+
+      const themeColors = useMemo(() => THEMES[theme] || THEMES.minimal, [theme]);
+
+      function calculateStats(isoDate) {
+        const birth = parseISODateToLocalMidnight(isoDate);
+        if (!birth) return null;
+
+        const now = new Date();
+
+        // Validación: si la fecha es futura, no tiene sentido
+        if (birth.getTime() > now.getTime()) {
+          return {
+            invalid: true,
+            message: "La fecha de nacimiento no puede ser en el futuro.",
+          };
+        }
+
+        const msInDay = 1000 * 60 * 60 * 24;
+        const msInWeek = msInDay * 7;
+
+        const diffMs = now.getTime() - birth.getTime();
+        const daysLived = Math.floor(diffMs / msInDay);
+
+        // 80 años * 52 semanas
+        const totalWeeks = 4160;
+
+        let weeksLived = Math.floor(diffMs / msInWeek);
+        weeksLived = Math.max(0, weeksLived);
+
+        // Si alguien supera 80 años, clamp para visualización/progreso
+        const weeksLivedClamped = clamp(weeksLived, 0, totalWeeks);
+        const weeksRemaining = Math.max(0, totalWeeks - weeksLivedClamped);
+
+        const percentageLived = clamp(Math.round((weeksLivedClamped / totalWeeks) * 100), 0, 100);
+
+        // Aproximación simple, consistente
+        const yearsLived = Math.floor(daysLived / 365.2425);
+        const monthsLived = Math.floor((daysLived % 365.2425) / 30.436875);
+
+        return {
+          invalid: false,
+          weeksLived,
+          weeksLivedClamped,
+          totalWeeks,
+          weeksRemaining,
+          percentageLived,
+          daysLived,
+          yearsLived,
+          monthsLived,
+        };
+      }
+
+      function handleSaveBirthdate() {
+        setError("");
+        if (!tempBirthdate) return;
+
+        const s = calculateStats(tempBirthdate);
+        if (!s || s.invalid) {
+          setError(s?.message || "Fecha inválida.");
+          return;
+        }
+
+        setBirthdate(tempBirthdate);
+        setStats(s);
+        safeSet(STORAGE.birthdate, tempBirthdate);
+      }
+
+      function handleReset() {
+        setBirthdate("");
+        setTempBirthdate("");
+        setStats(null);
+        setShowSettings(false);
+        setError("");
+        safeRemove(STORAGE.birthdate);
+      }
+
+      function handleThemeChange(newTheme) {
+        if (!THEMES[newTheme]) return;
+        setTheme(newTheme);
+        safeSet(STORAGE.theme, newTheme);
+      }
+
+      function handleDesignChange(newDesign) {
+        setDesign(newDesign);
+        safeSet(STORAGE.design, newDesign);
+      }
+
+      // ====== Render de diseños (1 semana = 1 elemento en TODOS) ======
+      function weekColorFor(index) {
+        // index: 0..totalWeeks-1
+        const wl = stats.weeksLivedClamped;
+        if (index < wl) return themeColors.hex.weekPast;
+        if (index === wl) return themeColors.hex.weekCurrent;
+        return themeColors.hex.weekFuture;
+      }
+
+      function renderGridDesign() {
+        if (!stats || stats.invalid) return null;
+
+        const weeksPerRow = 52;
+        const rows = 80; // 4160/52
+        const cells = [];
+
+        for (let i = 0; i < stats.totalWeeks; i++) {
+          const isCurrent = i === stats.weeksLivedClamped;
+          cells.push(
+            <div
+              key={i}
+              className={"w-2 h-2 rounded-sm " + (isCurrent ? "animate-pulse" : "")}
+              style={{ backgroundColor: weekColorFor(i) }}
+              title={`Semana ${i + 1}`}
+            />
+          );
+        }
+
+        return (
+          <div className="w-full">
+            <div
+              className="grid gap-[2px] justify-center"
+              style={{ gridTemplateColumns: `repeat(${weeksPerRow}, minmax(0, 0.5rem))` }}
+            >
+              {cells}
+            </div>
+            <div className={"mt-3 text-xs text-center " + themeColors.textSecondary}>
+              80 filas (años) × 52 columnas (semanas)
+            </div>
+          </div>
+        );
+      }
+
+      function renderCircleDesign() {
+        if (!stats || stats.invalid) return null;
+
+        // Círculo por anillos: 80 anillos (años), 52 puntos por anillo (semanas)
+        const W = 340, H = 340;
+        const cx = W / 2, cy = H / 2;
+        const rings = 80;
+        const perRing = 52;
+
+        const maxR = 150;
+        const minR = 35;
+        const step = (maxR - minR) / (rings - 1);
+
+        const dots = [];
+        for (let year = 0; year < rings; year++) {
+          const r = minR + step * year;
+          for (let w = 0; w < perRing; w++) {
+            const idx = year * perRing + w;
+            const ang = (w / perRing) * Math.PI * 2 - Math.PI / 2;
+            const x = cx + r * Math.cos(ang);
+            const y = cy + r * Math.sin(ang);
+
+            const isCurrent = idx === stats.weeksLivedClamped;
+            dots.push(
+              <circle
+                key={idx}
+                cx={x}
+                cy={y}
+                r={isCurrent ? 2.2 : 1.3}
+                fill={weekColorFor(idx)}
+                opacity={isCurrent ? 1 : 0.95}
+              />
+            );
+          }
+        }
+
+        return (
+          <div className="w-full">
+            <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="mx-auto block">
+              {dots}
+              <text
+                x={cx}
+                y={cy - 4}
+                textAnchor="middle"
+                fontSize="32"
+                fontWeight="800"
+                fill={themeColors.hex.text}
+              >
+                {stats.percentageLived}%
+              </text>
+              <text
+                x={cx}
+                y={cy + 18}
+                textAnchor="middle"
+                fontSize="12"
+                fill={themeColors.hex.textSecondary}
+              >
+                vivido
+              </text>
+            </svg>
+            <div className={"mt-2 text-xs text-center " + themeColors.textSecondary}>
+              Anillos por año (52 semanas por anillo)
+            </div>
+          </div>
+        );
+      }
+
+      function renderWaveDesign() {
+        if (!stats || stats.invalid) return null;
+
+        // Sigue siendo 80x52, pero “olas” con altura variable por columna
+        const weeksPerRow = 52;
+        const bars = [];
+
+        for (let i = 0; i < stats.totalWeeks; i++) {
+          const col = i % weeksPerRow;
+          const base = 6;
+          const amp = 10;
+          const h = base + Math.round((Math.sin(col * 0.35) + 1) * 0.5 * amp);
+
+          const isCurrent = i === stats.weeksLivedClamped;
+          bars.push(
+            <div
+              key={i}
+              className={"w-[6px] rounded-t " + (isCurrent ? "animate-pulse" : "")}
+              style={{ height: `${h}px`, backgroundColor: weekColorFor(i) }}
+              title={`Semana ${i + 1}`}
+            />
+          );
+        }
+
+        return (
+          <div className="w-full">
+            <div
+              className="grid gap-[2px] justify-center items-end"
+              style={{ gridTemplateColumns: `repeat(${weeksPerRow}, minmax(0, 6px))` }}
+            >
+              {bars}
+            </div>
+            <div className={"mt-3 text-xs text-center " + themeColors.textSecondary}>
+              Olas (cada barra sigue siendo 1 semana)
+            </div>
+          </div>
+        );
+      }
+
+      function renderSpiralDesign() {
+        if (!stats || stats.invalid) return null;
+
+        const W = 340, H = 340;
+        const cx = W / 2, cy = H / 2;
+
+        // 1 punto = 1 semana, espiral con varias vueltas
+        const turns = 14; // vueltas de la espiral
+        const maxR = 150;
+
+        const dots = [];
+        for (let i = 0; i < stats.totalWeeks; i++) {
+          const t = i / (stats.totalWeeks - 1); // 0..1
+          const ang = t * Math.PI * 2 * turns - Math.PI / 2;
+          const r = 10 + t * (maxR - 10);
+
+          const x = cx + r * Math.cos(ang);
+          const y = cy + r * Math.sin(ang);
+
+          const isCurrent = i === stats.weeksLivedClamped;
+          dots.push(
+            <circle
+              key={i}
+              cx={x}
+              cy={y}
+              r={isCurrent ? 2.4 : 1.1}
+              fill={weekColorFor(i)}
+              opacity={isCurrent ? 1 : 0.95}
+            />
+          );
+        }
+
+        return (
+          <div className="w-full">
+            <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="mx-auto block">
+              {dots}
+            </svg>
+            <div className={"mt-2 text-xs text-center " + themeColors.textSecondary}>
+              Espiral (1 punto = 1 semana)
+            </div>
+          </div>
+        );
+      }
+
+      function renderDesign() {
+        switch (design) {
+          case "grid": return renderGridDesign();
+          case "circle": return renderCircleDesign();
+          case "wave": return renderWaveDesign();
+          case "spiral": return renderSpiralDesign();
+          default: return renderGridDesign();
+        }
+      }
+
+      // ====== UI ======
+      if (showSettings) {
+        return (
+          <div className={`min-h-screen safe-bottom ${themeColors.bg} ${themeColors.text} p-4`}>
+            <div className="max-w-md mx-auto pt-8">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold">Ajustes</h2>
+                <button
+                  onClick={() => setShowSettings(false)}
+                  className={themeColors.textSecondary}
+                  aria-label="Cerrar ajustes"
+                >
+                  <XIcon />
+                </button>
+              </div>
+
+              <div className={`${themeColors.card} p-4 rounded-lg mb-4 border ${themeColors.border}`}>
+                <h3 className="font-semibold mb-3">Tema</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => handleThemeChange("minimal")}
+                    className={`p-3 rounded-lg border-2 ${theme === "minimal" ? "border-gray-900" : themeColors.border} flex items-center gap-2`}
+                  >
+                    <SunIcon /><span>Minimal</span>
+                  </button>
+                  <button
+                    onClick={() => handleThemeChange("dark")}
+                    className={`p-3 rounded-lg border-2 ${theme === "dark" ? "border-purple-500" : themeColors.border} flex items-center gap-2`}
+                  >
+                    <MoonIcon /><span>Oscuro</span>
+                  </button>
+                  <button
+                    onClick={() => handleThemeChange("warm")}
+                    className={`p-3 rounded-lg border-2 ${theme === "warm" ? "border-orange-600" : themeColors.border} flex items-center gap-2`}
+                  >
+                    <SparklesIcon /><span>Cálido</span>
+                  </button>
+                  <button
+                    onClick={() => handleThemeChange("ocean")}
+                    className={`p-3 rounded-lg border-2 ${theme === "ocean" ? "border-blue-600" : themeColors.border} flex items-center gap-2`}
+                  >
+                    <DropletsIcon /><span>Océano</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className={`${themeColors.card} p-4 rounded-lg mb-4 border ${themeColors.border}`}>
+                <h3 className="font-semibold mb-3">Diseño</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => handleDesignChange("grid")}
+                    className={`p-3 rounded-lg border-2 ${design === "grid" ? "ring-2 ring-offset-2 ring-black/20" : ""} ${themeColors.border}`}
+                  >
+                    Cuadrícula
+                  </button>
+                  <button
+                    onClick={() => handleDesignChange("circle")}
+                    className={`p-3 rounded-lg border-2 ${design === "circle" ? "ring-2 ring-offset-2 ring-black/20" : ""} ${themeColors.border}`}
+                  >
+                    Círculo
+                  </button>
+                  <button
+                    onClick={() => handleDesignChange("wave")}
+                    className={`p-3 rounded-lg border-2 ${design === "wave" ? "ring-2 ring-offset-2 ring-black/20" : ""} ${themeColors.border}`}
+                  >
+                    Ondas
+                  </button>
+                  <button
+                    onClick={() => handleDesignChange("spiral")}
+                    className={`p-3 rounded-lg border-2 ${design === "spiral" ? "ring-2 ring-offset-2 ring-black/20" : ""} ${themeColors.border}`}
+                  >
+                    Espiral
+                  </button>
+                </div>
+              </div>
+
+              {birthdate && (
+                <div className={`${themeColors.card} p-4 rounded-lg mb-4 border ${themeColors.border}`}>
+                  <h3 className="font-semibold mb-3">Fecha de nacimiento</h3>
+                  <p className={themeColors.textSecondary + " text-sm mb-3"}>
+                    Guardada: {parseISODateToLocalMidnight(birthdate)?.toLocaleDateString("es-ES")}
+                  </p>
+                  <button
+                    onClick={handleReset}
+                    className="w-full bg-red-500 hover:bg-red-600 text-white py-2 rounded-lg"
+                  >
+                    Restablecer fecha
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      }
+
+      if (!birthdate) {
+        return (
+          <div className={`min-h-screen safe-bottom ${themeColors.bg} ${themeColors.text} flex items-center justify-center p-4`}>
+            <div className="max-w-md w-full">
+              <h1 className="text-3xl font-bold mb-2 text-center">Tu vida en semanas</h1>
+              <p className={`${themeColors.textSecondary} text-center mb-8`}>
+                Visualiza el tiempo que has vivido (80 años = 4160 semanas)
+              </p>
+
+              <div className={`${themeColors.card} p-6 rounded-2xl border ${themeColors.border}`}>
+                <label className="block mb-2 font-medium">¿Cuándo naciste?</label>
+                <input
+                  type="date"
+                  className={`w-full p-3 rounded-lg mb-3 border-2 ${themeColors.border} bg-transparent`}
+                  value={tempBirthdate}
+                  onChange={(e) => setTempBirthdate(e.target.value)}
+                />
+
+                {error && (
+                  <div className="mb-3 text-sm text-red-600">
+                    {error}
+                  </div>
+                )}
+
+                <button
+                  onClick={handleSaveBirthdate}
+                  disabled={!tempBirthdate}
+                  className={`w-full ${themeColors.accent} ${themeColors.accentHover} text-white py-3 rounded-lg font-medium disabled:opacity-50`}
+                >
+                  Comenzar
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      if (!stats) return null;
+      if (stats.invalid) {
+        return (
+          <div className={`min-h-screen safe-bottom ${themeColors.bg} ${themeColors.text} flex items-center justify-center p-4`}>
+            <div className={`${themeColors.card} border ${themeColors.border} p-6 rounded-2xl max-w-md w-full`}>
+              <div className="text-lg font-bold mb-2">Error</div>
+              <div className={themeColors.textSecondary + " mb-4"}>{stats.message}</div>
+              <button className="w-full bg-red-500 hover:bg-red-600 text-white py-2 rounded-lg" onClick={handleReset}>
+                Restablecer
+              </button>
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <div className={`min-h-screen safe-bottom ${themeColors.bg} ${themeColors.text}`}>
+          <div className="max-w-md mx-auto p-4 pt-8">
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <h1 className="text-2xl font-bold">Tu vida</h1>
+                <p className={themeColors.textSecondary + " text-sm"}>
+                  {stats.yearsLived} años, {stats.monthsLived} meses
+                </p>
+              </div>
+              <button
+                onClick={() => setShowSettings(true)}
+                className={themeColors.textSecondary}
+                aria-label="Abrir ajustes"
+              >
+                <SettingsIcon />
+              </button>
+            </div>
+
+            <div className={`${themeColors.card} p-5 rounded-2xl mb-4 border ${themeColors.border}`}>
+              {renderDesign()}
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div className={`${themeColors.card} p-4 rounded-xl border ${themeColors.border}`}>
+                <p className={themeColors.textSecondary + " text-sm mb-1"}>Semanas vividas</p>
+                <p className="text-2xl font-bold">{stats.weeksLived.toLocaleString()}</p>
+              </div>
+              <div className={`${themeColors.card} p-4 rounded-xl border ${themeColors.border}`}>
+                <p className={themeColors.textSecondary + " text-sm mb-1"}>Días vividos</p>
+                <p className="text-2xl font-bold">{stats.daysLived.toLocaleString()}</p>
+              </div>
+            </div>
+
+            <div className={`${themeColors.card} p-6 rounded-2xl border ${themeColors.border}`}>
+              <div className="flex justify-between items-center mb-2">
+                <span className={themeColors.textSecondary}>Progreso de vida</span>
+                <span className="text-2xl font-bold">{stats.percentageLived}%</span>
+              </div>
+
+              <div className={`w-full rounded-full h-3 overflow-hidden ${themeColors.track}`}>
+                <div
+                  className={themeColors.accent + " h-full rounded-full transition-all duration-700"}
+                  style={{ width: `${stats.percentageLived}%` }}
+                />
+              </div>
+
+              <p className={themeColors.textSecondary + " text-sm mt-3"}>
+                Te quedan aproximadamente {stats.weeksRemaining.toLocaleString()} semanas (sobre 80 años)
+              </p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // React 18: createRoot
+    const root = ReactDOM.createRoot(document.getElementById("root"));
+    root.render(<WeeksOfLife />);
+  </script>
+</body>
+</html>
