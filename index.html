@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#ffffff" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -19,15 +19,15 @@
     input, textarea { -webkit-user-select: text; user-select: text; }
 
     html, body { height: 100%; }
-    body { margin: 0; overflow-x: hidden; min-height: 100dvh; }
+    body { margin: 0; overflow-x: hidden; min-height: 100dvh; background: white; }
     #root { min-height: 100dvh; }
 
     .safe-bottom { padding-bottom: calc(1rem + env(safe-area-inset-bottom)); }
+    .safe-top { padding-top: calc(0.5rem + env(safe-area-inset-top)); }
     .glass { backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
 
     .fade-in { animation: fadeIn .25s ease-out; }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(8px);} to { opacity:1; transform: translateY(0);} }
-
     summary::-webkit-details-marker { display: none; }
 
     /* Animaciones suaves (mobile-friendly) */
@@ -43,20 +43,32 @@
     .svg-rotate { transform-origin: center; transform-box: fill-box; animation: rotateSlow 26s linear infinite; }
     .twinkle { animation: twinkle 2.8s ease-in-out infinite; }
     .wiggle { animation: wiggle 6s ease-in-out infinite; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .design-shell, .design-shell-inner, .svg-rotate, .twinkle, .wiggle { animation: none !important; }
+      .animate-pulse { animation: none !important; }
+    }
   </style>
 </head>
 <body>
   <div id="root"></div>
 
   <script type="text/babel">
-    const { useEffect, useMemo, useState } = React;
+    const { useEffect, useMemo, useRef, useState } = React;
 
-    const KEYS = { session: "wol_session_v2", users: "wol_users_v2" };
+    // ================== SAFE STORAGE ==================
+    const KEYS = { session: "wol_session_v3", users: "wol_users_v3" };
     const safeGet = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
     const safeSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
-    const loadJSON = (k, fb) => { const r = safeGet(k); if (!r) return fb; try { return JSON.parse(r); } catch { return fb; } };
+    const safeDel = (k) => { try { localStorage.removeItem(k); } catch {} };
+    const loadJSON = (k, fb) => {
+      const r = safeGet(k);
+      if (!r) return fb;
+      try { return JSON.parse(r); } catch { return fb; }
+    };
     const saveJSON = (k, o) => safeSet(k, JSON.stringify(o));
 
+    // ================== ICONS ==================
     const SettingsIcon = () => (
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
         <circle cx="12" cy="12" r="3"></circle>
@@ -82,6 +94,7 @@
       </svg>
     );
 
+    // ================== HELPERS ==================
     const clamp = (n, a, b) => Math.min(b, Math.max(a, n));
     const fmtInt = (n) => Math.round(n).toLocaleString(undefined);
 
@@ -108,6 +121,7 @@
       return (b.getMonth() === now.getMonth()) && (b.getDate() === now.getDate());
     }
 
+    // ================== SEEDED RNG (daily stable) ==================
     function hashToUint(str) {
       let h = 2166136261 >>> 0;
       for (let i = 0; i < str.length; i++) {
@@ -134,6 +148,7 @@
       return a.slice(0, Math.min(n, a.length));
     }
 
+    // ================== CRYPTO (password) ==================
     async function sha256Hex(text) {
       if (crypto?.subtle?.digest) {
         const enc = new TextEncoder().encode(text);
@@ -143,9 +158,10 @@
       return String(hashToUint(text));
     }
     async function passwordHash(username, password) {
-      return await sha256Hex("wol:v2:" + username + ":" + password);
+      return await sha256Hex("wol:v3:" + username + ":" + password);
     }
 
+    // ================== THEMES ==================
     const THEMES = {
       minimal: { label:{es:"Minimal",en:"Minimal"}, bg:"bg-white", text:"text-gray-900", textSecondary:"text-gray-600", card:"bg-gray-50", border:"border-gray-200", accent:"bg-gray-900", accentHover:"hover:bg-gray-800", track:"bg-gray-200",
         hex:{ text:"#111827", textSecondary:"#4b5563", weekPast:"#111827", weekFuture:"#e5e7eb", weekCurrent:"#3b82f6", accent:"#111827", track:"#e5e7eb" } },
@@ -165,57 +181,84 @@
         hex:{ text:"#0f172a", textSecondary:"#475569", weekPast:"#334155", weekFuture:"#cbd5e1", weekCurrent:"#0ea5e9", accent:"#1f2937", track:"#cbd5e1" } },
     };
 
+    // ================== I18N ==================
     const I18N = {
       es: {
-        appTitle:"Tu vida en semanas", appSubtitle:"Visualiza tu tiempo (80 años = 4160 semanas)",
-        next:"Siguiente", back:"Atrás", skip:"Omitir", settings:"Ajustes", close:"Cerrar", start:"Empezar", save:"Guardar",
-        language:"Idioma", spanish:"Español", english:"Inglés", theme:"Tema", design:"Diseño", profile:"Perfil",
-        register:"Registrarme", login:"Iniciar sesión", username:"Usuario", password:"Contraseña", logout:"Cerrar sesión",
-        exportData:"Exportar datos", importData:"Importar", exportHintTitle:"Llevar tu perfil a otro dispositivo",
+        appTitle:"Tu vida en semanas",
+        appSubtitle:"Visualiza tu tiempo (80 años = 4160 semanas)",
+        settings:"Ajustes", close:"Cerrar",
+        language:"Idioma", spanish:"Español", english:"Inglés",
+        theme:"Tema", design:"Diseño",
+        register:"Registrarme", login:"Iniciar sesión",
+        username:"Usuario", password:"Contraseña",
+        logout:"Cerrar sesión",
+        exportData:"Exportar datos", importData:"Importar",
+        exportHintTitle:"Llevar tu perfil a otro dispositivo",
         exportHintBody:"Ajustes → abajo → Exportar datos. Copia el código y pégalo en el otro móvil en Importar.",
-        copy:"Copiar", copied:"Copiado", whenBorn:"¿Cuándo naciste?", yourLife:"Tu vida",
-        weeksLived:"Semanas vividas", daysLived:"Días vividos", lifeProgress:"Progreso", weeksLeft:"Te quedan aprox.", weeks:"semanas",
-        invalidFuture:"La fecha no puede ser en el futuro.",
-        moodTodayTitle:"¿Cómo estás hoy?", moodTodaySubtitle:"Un toque y queda guardado.", moodLogNow:"Registrar ánimo ahora",
-        mood:"Estado de ánimo", history90:"Historial (90 días)",
-        highlights:"Life highlights", societal:"Contexto social", cosmic:"Perspectiva cósmica", nature:"Mundo natural",
-        optionalNumbers:"Datos numéricos (opcional)", birthdayTitle:"¡Feliz cumpleaños!", birthdayDismiss:"Ver luego", birthdayOpen:"Leer carta",
-        birthdayLetter:"Carta", onboardingTitle:"Bienvenido", onboardingSubtitle:"Vamos paso a paso.",
+        copy:"Copiar", copied:"Copiado",
+        whenBorn:"¿Cuándo naciste?", setBirthdate:"Vamos a guardar tu fecha de nacimiento", done:"Listo",
         chooseAuth:"¿Qué quieres hacer?", alreadyHave:"Ya tengo cuenta", createNew:"Crear cuenta",
-        setBirthdate:"Vamos a guardar tu fecha de nacimiento", done:"Listo"
+        invalidFuture:"La fecha no puede ser en el futuro.",
+        yourLife:"Tu vida",
+        weeksLived:"Semanas vividas", daysLived:"Días vividos",
+        lifeProgress:"Progreso", weeksLeft:"Te quedan aprox.", weeks:"semanas",
+        moodTodayTitle:"¿Cómo estás hoy?", moodTodaySubtitle:"Un toque y queda guardado.", skip:"Omitir",
+        mood:"Estado de ánimo", history90:"Historial (90 días)", moodLogNow:"Registrar ánimo ahora",
+        highlights:"Life highlights",
+        societal:"Contexto social", cosmic:"Perspectiva cósmica", nature:"Mundo natural",
+        optionalNumbers:"Datos numéricos (opcional)",
+        save:"Guardar",
+        birthdayTitle:"¡Feliz cumpleaños!", birthdayDismiss:"Ver luego", birthdayOpen:"Leer carta", birthdayLetter:"Carta",
+        errorTitle:"Algo falló",
+        errorBody:"La app detectó un error. Puedes reiniciar los datos locales y volver a abrir.",
+        reset:"Resetear datos"
       },
       en: {
-        appTitle:"Your life in weeks", appSubtitle:"Visualize your time (80 years = 4,160 weeks)",
-        next:"Next", back:"Back", skip:"Skip", settings:"Settings", close:"Close", start:"Start", save:"Save",
-        language:"Language", spanish:"Spanish", english:"English", theme:"Theme", design:"Design", profile:"Profile",
-        register:"Sign up", login:"Log in", username:"Username", password:"Password", logout:"Log out",
-        exportData:"Export data", importData:"Import", exportHintTitle:"Move your profile to another device",
+        appTitle:"Your life in weeks",
+        appSubtitle:"Visualize your time (80 years = 4,160 weeks)",
+        settings:"Settings", close:"Close",
+        language:"Language", spanish:"Spanish", english:"English",
+        theme:"Theme", design:"Design",
+        register:"Sign up", login:"Log in",
+        username:"Username", password:"Password",
+        logout:"Log out",
+        exportData:"Export data", importData:"Import",
+        exportHintTitle:"Move your profile to another device",
         exportHintBody:"Settings → bottom → Export data. Copy the code and paste it on the other phone using Import.",
-        copy:"Copy", copied:"Copied", whenBorn:"When were you born?", yourLife:"Your life",
-        weeksLived:"Weeks lived", daysLived:"Days lived", lifeProgress:"Progress", weeksLeft:"You have approx.", weeks:"weeks left",
-        invalidFuture:"Birthdate cannot be in the future.",
-        moodTodayTitle:"How are you today?", moodTodaySubtitle:"Tap once and it’s saved.", moodLogNow:"Log mood now",
-        mood:"Mood", history90:"History (90 days)",
-        highlights:"Life highlights", societal:"Societal context", cosmic:"Cosmic perspective", nature:"Natural world",
-        optionalNumbers:"Numeric context (optional)", birthdayTitle:"Happy Birthday!", birthdayDismiss:"Later", birthdayOpen:"Read letter",
-        birthdayLetter:"Letter", onboardingTitle:"Welcome", onboardingSubtitle:"Let’s do it step by step.",
+        copy:"Copy", copied:"Copied",
+        whenBorn:"When were you born?", setBirthdate:"Let’s save your birthdate", done:"Done",
         chooseAuth:"What do you want to do?", alreadyHave:"I already have an account", createNew:"Create an account",
-        setBirthdate:"Let’s save your birthdate", done:"Done"
+        invalidFuture:"Birthdate cannot be in the future.",
+        yourLife:"Your life",
+        weeksLived:"Weeks lived", daysLived:"Days lived",
+        lifeProgress:"Progress", weeksLeft:"You have approx.", weeks:"weeks left",
+        moodTodayTitle:"How are you today?", moodTodaySubtitle:"Tap once and it’s saved.", skip:"Skip",
+        mood:"Mood", history90:"History (90 days)", moodLogNow:"Log mood now",
+        highlights:"Life highlights",
+        societal:"Societal context", cosmic:"Cosmic perspective", nature:"Natural world",
+        optionalNumbers:"Numeric context (optional)",
+        save:"Save",
+        birthdayTitle:"Happy Birthday!", birthdayDismiss:"Later", birthdayOpen:"Read letter", birthdayLetter:"Letter",
+        errorTitle:"Something broke",
+        errorBody:"The app detected an error. You can reset local data and reopen.",
+        reset:"Reset data"
       }
     };
 
+    // ================== MOODS ==================
     const MOODS = [
-      { id:"happy", label:{es:"Contento", en:"Happy"}, color:"#22c55e", kind:"pos" },
-      { id:"calm", label:{es:"Calmado", en:"Calm"}, color:"#06b6d4", kind:"pos" },
-      { id:"focused", label:{es:"Enfocado", en:"Focused"}, color:"#3b82f6", kind:"pos" },
-      { id:"grateful", label:{es:"Agradecido", en:"Grateful"}, color:"#eab308", kind:"pos" },
-      { id:"tired", label:{es:"Cansado", en:"Tired"}, color:"#a3a3a3", kind:"neg" },
-      { id:"sad", label:{es:"Triste", en:"Sad"}, color:"#6366f1", kind:"neg" },
-      { id:"angry", label:{es:"Enfadado", en:"Angry"}, color:"#ef4444", kind:"neg" },
-      { id:"anxious", label:{es:"Ansioso", en:"Anxious"}, color:"#f59e0b", kind:"neg" },
+      { id:"happy",    label:{es:"Contento", en:"Happy"},       color:"#22c55e", kind:"pos" },
+      { id:"calm",     label:{es:"Calmado", en:"Calm"},         color:"#06b6d4", kind:"pos" },
+      { id:"focused",  label:{es:"Enfocado", en:"Focused"},     color:"#3b82f6", kind:"pos" },
+      { id:"grateful", label:{es:"Agradecido", en:"Grateful"},  color:"#eab308", kind:"pos" },
+      { id:"tired",    label:{es:"Cansado", en:"Tired"},        color:"#a3a3a3", kind:"neg" },
+      { id:"sad",      label:{es:"Triste", en:"Sad"},           color:"#6366f1", kind:"neg" },
+      { id:"angry",    label:{es:"Enfadado", en:"Angry"},       color:"#ef4444", kind:"neg" },
+      { id:"anxious",  label:{es:"Ansioso", en:"Anxious"},      color:"#f59e0b", kind:"neg" },
     ];
     const moodById = (id) => MOODS.find(m => m.id === id) || null;
 
+    // ================== DEFAULT CONTEXT ==================
     const DEFAULT_CONTEXT = {
       populationAtBirth: 6900000000,
       populationNow: 8100000000,
@@ -223,6 +266,7 @@
       deathsPerYear: 60000000,
     };
 
+    // ================== STATS ==================
     function computeStats(birthISO, context) {
       const birth = parseISODateToLocalMidnight(birthISO);
       if (!birth) return null;
@@ -269,7 +313,6 @@
 
       return {
         invalid:false,
-        birth, now,
         totalWeeks,
         weeksLived, weeksLivedClamped, weeksRemaining,
         percentageLived: pct,
@@ -281,22 +324,20 @@
       };
     }
 
+    // ================== INSIGHTS (rotate daily) ==================
     function buildInsightPools(lang, stats, context) {
       const popStart = Number(context.populationAtBirth || 0);
       const popNow = Number(context.populationNow || 0);
-      const meetTotal = 80000;
-      const metLikely = clamp(Math.round(meetTotal * (stats.percentageLived / 100)), 0, meetTotal);
 
       const social = [
         () => (lang==="es")
           ? `Durante tu vida, la población mundial pasó de ~${fmtInt(popStart)} a ~${fmtInt(popNow)}.`
           : `During your lifetime, world population moved from ~${fmtInt(popStart)} to ~${fmtInt(popNow)}.`,
         () => (lang==="es")
-          ? `La media dice ~${fmtInt(meetTotal)} personas conocidas en una vida. Tú probablemente ~${fmtInt(metLikely)}.`
-          : `Average lifetime meetings: ~${fmtInt(meetTotal)} people. You likely ~${fmtInt(metLikely)}.`,
-        () => (lang==="es")
           ? `Desde tu nacimiento, el mundo vivió ~${fmtInt(stats.estBirths)} nacimientos y ~${fmtInt(stats.estDeaths)} muertes (estimación).`
           : `Since your birth: ~${fmtInt(stats.estBirths)} births and ~${fmtInt(stats.estDeaths)} deaths (estimate).`,
+        () => (lang==="es") ? `Tu tiempo es finito. Por eso importa.` : `Your time is finite. That’s why it matters.`,
+        () => (lang==="es") ? `Una semana buena se gana por repetición.` : `A good week is won by repetition.`,
       ];
 
       const cosmic = [
@@ -319,8 +360,8 @@
           ? `Dormiste ~${fmtInt(stats.sleepHours)} horas. Tu cuerpo te sostuvo miles de días.`
           : `You slept ~${fmtInt(stats.sleepHours)} hours. Your body carried you for thousands of days.`,
         () => (lang==="es")
-          ? `El cambio es normal: incluso tus células se han renovado varias veces.`
-          : `Change is normal: even your cells have renewed multiple times.`,
+          ? `El cambio es normal: tus células se han renovado varias veces.`
+          : `Change is normal: your cells have renewed multiple times.`,
       ];
 
       return { social, cosmic, nature };
@@ -330,23 +371,21 @@
       return (lang === "es")
         ? [
             ["Preciso. Simple. Real.", "Una semana a la vez."],
-            ["Perspectiva útil.", "Tu tiempo se puede ver."],
             ["No es presión, es claridad.", "Hoy cuenta."],
+            ["Perspectiva útil.", "Tu tiempo se puede ver."],
           ]
         : [
             ["Precise. Simple. Real.", "One week at a time."],
-            ["Useful perspective.", "You can see your time."],
             ["Not pressure—clarity.", "Today matters."],
+            ["Useful perspective.", "You can see your time."],
           ];
     }
 
     function lifeHighlightsLines(lang, stats) {
-      // mantiene el estilo “Life highlights” que querías
       const weeks = stats.weeksLived;
       const pct = stats.percentageLived;
       const days = stats.daysLived;
       const seasons = stats.seasons;
-
       const heart = stats.heartBeats;
       const breaths = stats.breaths;
       const sleepH = stats.sleepHours;
@@ -356,18 +395,26 @@
           `You've lived ${fmtInt(weeks)} weeks, which is ${pct}% of a full life.`,
           `That's ${fmtInt(days)} days of experience and approximately ${fmtInt(seasons)} seasons observed.`,
           `Your heart has beaten approximately ${fmtInt(heart)} times.`,
-          `You've taken around ${fmtInt(breaths)} breaths and slept about ${fmtInt(sleepH)} hours.`
+          `You've taken around ${fmtInt(breaths)} breaths and slept about ${fmtInt(sleepH)} hours.`,
         ];
       }
-      // ES (misma estructura)
       return [
         `Has vivido ${fmtInt(weeks)} semanas, lo que es un ${pct}% de una vida completa.`,
         `Eso son ${fmtInt(days)} días de experiencia y aproximadamente ${fmtInt(seasons)} estaciones observadas.`,
         `Tu corazón ha latido aproximadamente ${fmtInt(heart)} veces.`,
-        `Has respirado alrededor de ${fmtInt(breaths)} veces y dormido unas ${fmtInt(sleepH)} horas.`
+        `Has respirado alrededor de ${fmtInt(breaths)} veces y dormido unas ${fmtInt(sleepH)} horas.`,
       ];
     }
 
+    // ================== EXPORT/IMPORT ==================
+    function unicodeB64Encode(obj) {
+      return btoa(unescape(encodeURIComponent(JSON.stringify(obj))));
+    }
+    function unicodeB64Decode(str) {
+      return JSON.parse(decodeURIComponent(escape(atob(str))));
+    }
+
+    // ================== UI ==================
     function Modal({ open, onClose, children }) {
       if (!open) return null;
       return (
@@ -406,9 +453,28 @@
       );
     }
 
+    // ================== ERROR BOUNDARY ==================
+    class ErrorBoundary extends React.Component {
+      constructor(props) {
+        super(props);
+        this.state = { hasError: false, error: null };
+      }
+      static getDerivedStateFromError(error) {
+        return { hasError: true, error };
+      }
+      componentDidCatch(error, info) {
+        // no-op (could log)
+      }
+      render() {
+        if (this.state.hasError) return this.props.fallback(this.state.error);
+        return this.props.children;
+      }
+    }
+
+    // ================== APP ==================
     function App() {
       const [users, setUsers] = useState(() => loadJSON(KEYS.users, {}));
-      const [session, setSession] = useState(() => loadJSON(KEYS.session, null));
+      const [session, setSession] = useState(() => loadJSON(KEYS.session, null)); // { username }
       const currentUser = session?.username ? users[session.username] : null;
 
       const [flow, setFlow] = useState(() => {
@@ -434,12 +500,21 @@
 
       const [showMoodModal, setShowMoodModal] = useState(false);
 
+      const [exportCode, setExportCode] = useState("");
+      const [importCode, setImportCode] = useState("");
+      const [copyState, setCopyState] = useState("idle");
+      const [importMsg, setImportMsg] = useState("");
+
+      const [showBirthdayCard, setShowBirthdayCard] = useState(false);
+      const [showBirthdayModal, setShowBirthdayModal] = useState(false);
+
       const themeColors = useMemo(() => THEMES[theme] || THEMES.minimal, [theme]);
       const t = (k) => I18N[lang]?.[k] ?? I18N.en?.[k] ?? k;
 
       useEffect(() => saveJSON(KEYS.users, users), [users]);
       useEffect(() => saveJSON(KEYS.session, session), [session]);
 
+      // refresh local state when session changes
       useEffect(() => {
         const u = session?.username ? users[session.username] : null;
         if (!u) return;
@@ -472,6 +547,7 @@
         return computeStats(birthdate, context);
       }, [birthdate, context]);
 
+      // daily insight selection
       const dailyInsights = useMemo(() => {
         if (!currentUser || !stats || stats.invalid) return null;
         const seed = hashToUint(currentUser.username + "|" + isoToday() + "|" + design + "|" + theme + "|" + lang);
@@ -485,12 +561,27 @@
         return { intro, social, cosmic, nature };
       }, [currentUser?.username, stats, context, design, theme, lang]);
 
+      // prompt mood once per day
       useEffect(() => {
         if (!currentUser || !birthdate) return;
         const today = isoToday();
         const moods = currentUser.moods || {};
         if (!moods[today]) setShowMoodModal(true);
       }, [currentUser?.username, birthdate]);
+
+      // birthday card (once per day)
+      useEffect(() => {
+        if (!currentUser || !birthdate) return;
+        if (!isBirthdayToday(birthdate)) { setShowBirthdayCard(false); return; }
+        const today = isoToday();
+        if (currentUser.birthdayShownISO === today) { setShowBirthdayCard(false); return; }
+        setShowBirthdayCard(true);
+      }, [currentUser?.username, birthdate]);
+
+      function dismissBirthdayCard() {
+        setShowBirthdayCard(false);
+        updateCurrentUser({ birthdayShownISO: isoToday() });
+      }
 
       async function doRegister() {
         setAuthMsg("");
@@ -500,7 +591,7 @@
         if (users[u]) { setAuthMsg(lang === "es" ? "Ese usuario ya existe." : "That username already exists."); return; }
         const passHash = await passwordHash(u, p);
         const newUser = {
-          version: 2,
+          version: 3,
           username: u,
           passHash,
           createdAt: Date.now(),
@@ -528,6 +619,15 @@
         setSession({ username: u });
         setAuthUser(""); setAuthPass(""); setAuthMsg("");
         setFlow(rec.birthdate ? "home" : "setBirthdate");
+      }
+
+      function logout() {
+        setSession(null);
+        setShowSettings(false);
+        setExportCode("");
+        setImportCode("");
+        setImportMsg("");
+        setFlow("welcome");
       }
 
       function saveBirthdate() {
@@ -564,13 +664,220 @@
         return out;
       }
 
-      // ================== SETTINGS (igual que antes pero no lo re-pego entero para ahorrar) ==================
-      // Para que no se haga infinito este mensaje: tu bloque de SettingsScreen anterior sigue funcionando.
-      // Aquí lo mantengo compacto: (NO cambia nada crítico)
+      function doExport() {
+        if (!currentUser) return;
+        const payload = { app:"weeks-of-life", version:3, exportedAt:Date.now(), user: currentUser };
+        try {
+          setExportCode(unicodeB64Encode(payload));
+          setCopyState("idle");
+        } catch {
+          setExportCode("");
+        }
+      }
+
+      async function copyExport() {
+        if (!exportCode) return;
+        try {
+          await navigator.clipboard.writeText(exportCode);
+          setCopyState("copied");
+          setTimeout(() => setCopyState("idle"), 1200);
+        } catch {
+          setCopyState("copied");
+          setTimeout(() => setCopyState("idle"), 1200);
+        }
+      }
+
+      function doImport() {
+        setImportMsg("");
+        try {
+          const payload = unicodeB64Decode(importCode.trim());
+          if (!payload || payload.app !== "weeks-of-life" || !payload.user?.username) throw new Error("bad");
+          const u = payload.user.username;
+          setUsers(prev => ({ ...prev, [u]: payload.user }));
+          setImportMsg(lang === "es" ? "Perfil importado. Ahora inicia sesión con tu usuario/contraseña." : "Profile imported. Now log in with your username/password.");
+          setImportCode("");
+        } catch {
+          setImportMsg(lang === "es" ? "Código inválido." : "Invalid code.");
+        }
+      }
+
+      // ================== DESIGNS (memoized) ==================
+      const designNode = useMemo(() => {
+        if (!stats || stats.invalid || !currentUser) return null;
+
+        const weekColorFor = (i) => {
+          const wl = stats.weeksLivedClamped ?? 0;
+          if (i < wl) return themeColors.hex.weekPast;
+          if (i === wl) return themeColors.hex.weekCurrent;
+          return themeColors.hex.weekFuture;
+        };
+
+        const WEEKS = 4160;
+        const weeksPerRow = 52;
+
+        const renderGrid = () => {
+          const cells = [];
+          for (let i = 0; i < WEEKS; i++) {
+            const isCurrent = i === stats.weeksLivedClamped;
+            cells.push(
+              <div key={i}
+                className={"w-2 h-2 rounded-sm " + (isCurrent ? "animate-pulse" : "")}
+                style={{ backgroundColor: weekColorFor(i) }} />
+            );
+          }
+          return (
+            <div className="grid gap-[2px] justify-center"
+                 style={{ gridTemplateColumns: `repeat(${weeksPerRow}, minmax(0, 0.5rem))` }}>
+              {cells}
+            </div>
+          );
+        };
+
+        const renderSnake = () => {
+          const cells = [];
+          for (let row=0; row<80; row++) {
+            for (let col=0; col<52; col++) {
+              const idx = row%2===0 ? (row*52 + col) : (row*52 + (51-col));
+              const isCurrent = idx === stats.weeksLivedClamped;
+              cells.push(
+                <div key={row+"-"+col}
+                  className={"w-2 h-2 rounded-sm " + (isCurrent ? "animate-pulse" : "")}
+                  style={{ backgroundColor: weekColorFor(idx) }} />
+              );
+            }
+          }
+          return (
+            <div className="wiggle">
+              <div className="grid gap-[2px] justify-center"
+                   style={{ gridTemplateColumns: `repeat(${weeksPerRow}, minmax(0, 0.5rem))` }}>
+                {cells}
+              </div>
+            </div>
+          );
+        };
+
+        const renderWave = () => {
+          const bars = [];
+          for (let i = 0; i < WEEKS; i++) {
+            const col = i % weeksPerRow;
+            const base = 6, amp = 10;
+            const h = base + Math.round((Math.sin(col * 0.35) + 1) * 0.5 * amp);
+            const isCurrent = i === stats.weeksLivedClamped;
+            bars.push(
+              <div key={i}
+                className={"w-[6px] rounded-t " + (isCurrent ? "animate-pulse" : "")}
+                style={{ height: `${h}px`, backgroundColor: weekColorFor(i) }} />
+            );
+          }
+          return (
+            <div className="grid gap-[2px] justify-center items-end"
+                 style={{ gridTemplateColumns: `repeat(${weeksPerRow}, minmax(0, 6px))` }}>
+              {bars}
+            </div>
+          );
+        };
+
+        const renderCircle = () => {
+          const W=340,H=340, cx=W/2, cy=H/2;
+          const rings=80, perRing=52, maxR=150, minR=35, step=(maxR-minR)/(rings-1);
+          const dots = [];
+          for (let year=0; year<rings; year++) {
+            const r = minR + step*year;
+            for (let w=0; w<perRing; w++) {
+              const idx = year*perRing + w;
+              const ang = (w/perRing)*Math.PI*2 - Math.PI/2;
+              const x = cx + r*Math.cos(ang);
+              const y = cy + r*Math.sin(ang);
+              const isCurrent = idx === stats.weeksLivedClamped;
+              dots.push(<circle key={idx} cx={x} cy={y} r={isCurrent?2.2:1.3} fill={weekColorFor(idx)} />);
+            }
+          }
+          return (
+            <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="mx-auto block">
+              <g className="svg-rotate">{dots}</g>
+              <text x={cx} y={cy - 4} textAnchor="middle" fontSize="32" fontWeight="800" fill={themeColors.hex.text}>
+                {stats.percentageLived}%
+              </text>
+            </svg>
+          );
+        };
+
+        const renderSpiral = () => {
+          const W=340,H=340, cx=W/2, cy=H/2;
+          const turns=14, maxR=150;
+          const dots = [];
+          for (let i=0; i<WEEKS; i++) {
+            const tt = i/(WEEKS-1);
+            const ang = tt*Math.PI*2*turns - Math.PI/2;
+            const r = 10 + tt*(maxR-10);
+            const x = cx + r*Math.cos(ang);
+            const y = cy + r*Math.sin(ang);
+            const isCurrent = i === stats.weeksLivedClamped;
+            dots.push(<circle key={i} cx={x} cy={y} r={isCurrent?2.4:1.1} fill={weekColorFor(i)} />);
+          }
+          return (
+            <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="mx-auto block">
+              <g className="svg-rotate">{dots}</g>
+            </svg>
+          );
+        };
+
+        const renderColumns = () => {
+          const cols = [];
+          for (let y=0; y<80; y++) {
+            const blocks = [];
+            for (let w=0; w<52; w++) {
+              const idx = y*52 + w;
+              const isCurrent = idx === stats.weeksLivedClamped;
+              blocks.push(
+                <div key={idx}
+                  className={"w-2 h-2 rounded-[2px] " + (isCurrent ? "animate-pulse" : "")}
+                  style={{ backgroundColor: weekColorFor(idx) }} />
+              );
+            }
+            cols.push(<div key={y} className="flex flex-col-reverse gap-[2px]">{blocks}</div>);
+          }
+          return <div className="flex gap-[3px] justify-center overflow-x-auto pb-1 wiggle">{cols}</div>;
+        };
+
+        const renderConstellation = () => {
+          const W=340,H=340;
+          const seed = hashToUint(currentUser.username + "|" + birthdate);
+          const rng = makeRng(seed);
+          const pts = [];
+          for (let i=0;i<WEEKS;i++) {
+            const a = rng()*Math.PI*2;
+            const r = Math.sqrt(rng()) * 150;
+            const x = W/2 + r*Math.cos(a);
+            const y = H/2 + r*Math.sin(a);
+            const isCurrent = i === stats.weeksLivedClamped;
+            const tw = (i % 17 === 0) ? "twinkle" : "";
+            pts.push(<circle key={i} cx={x} cy={y} r={isCurrent?2.6:1.1} fill={weekColorFor(i)} opacity={isCurrent?1:0.9} className={tw} />);
+          }
+          return (
+            <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="mx-auto block">
+              <g className="svg-rotate">{pts}</g>
+            </svg>
+          );
+        };
+
+        switch (design) {
+          case "grid": return renderGrid();
+          case "snake": return renderSnake();
+          case "wave": return renderWave();
+          case "circle": return renderCircle();
+          case "spiral": return renderSpiral();
+          case "columns": return renderColumns();
+          case "constellation": return renderConstellation();
+          default: return renderGrid();
+        }
+      }, [design, stats?.weeksLivedClamped, stats?.percentageLived, themeColors, currentUser?.username, birthdate]);
+
+      // ================== SCREENS ==================
       function SettingsScreen() {
         return (
-          <div className={`min-h-screen safe-bottom ${themeColors.bg} ${themeColors.text} p-4`}>
-            <div className="max-w-md mx-auto pt-8">
+          <div className={`min-h-screen safe-bottom safe-top ${themeColors.bg} ${themeColors.text} p-4`}>
+            <div className="max-w-md mx-auto pt-6">
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-bold">{t("settings")}</h2>
                 <button onClick={() => setShowSettings(false)} className={themeColors.textSecondary} aria-label={t("close")}>
@@ -615,35 +922,59 @@
 
               <Accordion title={t("optionalNumbers")} themeColors={themeColors}>
                 <div className={`${themeColors.textSecondary} text-xs mb-3`}>
-                  {lang === "es" ? "Opcional. Si no tocas nada, usa valores por defecto." : "Optional. If you don’t change anything, defaults are used."}
+                  {lang==="es" ? "Opcional. Si no tocas nada, usa valores por defecto." : "Optional. If you don’t change anything, defaults are used."}
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm">{lang==="es" ? "Población mundial al nacer" : "World population at birth"}</label>
+                  <label className="text-sm">{lang==="es" ? "Población al nacer" : "Population at birth"}</label>
                   <input className={`w-full p-3 rounded-xl border ${themeColors.border} bg-transparent`} inputMode="numeric"
-                         value={context.populationAtBirth}
-                         onChange={(e) => setContext(c => ({...c, populationAtBirth: e.target.value}))} />
-                  <label className="text-sm">{lang==="es" ? "Población mundial actual" : "Current world population"}</label>
+                    value={context.populationAtBirth} onChange={(e)=>setContext(c=>({...c, populationAtBirth: e.target.value}))} />
+                  <label className="text-sm">{lang==="es" ? "Población actual" : "Population now"}</label>
                   <input className={`w-full p-3 rounded-xl border ${themeColors.border} bg-transparent`} inputMode="numeric"
-                         value={context.populationNow}
-                         onChange={(e) => setContext(c => ({...c, populationNow: e.target.value}))} />
-                  <label className="text-sm">{lang==="es" ? "Nacimientos por año" : "Births per year"}</label>
+                    value={context.populationNow} onChange={(e)=>setContext(c=>({...c, populationNow: e.target.value}))} />
+                  <label className="text-sm">{lang==="es" ? "Nacimientos/año" : "Births/year"}</label>
                   <input className={`w-full p-3 rounded-xl border ${themeColors.border} bg-transparent`} inputMode="numeric"
-                         value={context.birthsPerYear}
-                         onChange={(e) => setContext(c => ({...c, birthsPerYear: e.target.value}))} />
-                  <label className="text-sm">{lang==="es" ? "Muertes por año" : "Deaths per year"}</label>
+                    value={context.birthsPerYear} onChange={(e)=>setContext(c=>({...c, birthsPerYear: e.target.value}))} />
+                  <label className="text-sm">{lang==="es" ? "Muertes/año" : "Deaths/year"}</label>
                   <input className={`w-full p-3 rounded-xl border ${themeColors.border} bg-transparent`} inputMode="numeric"
-                         value={context.deathsPerYear}
-                         onChange={(e) => setContext(c => ({...c, deathsPerYear: e.target.value}))} />
+                    value={context.deathsPerYear} onChange={(e)=>setContext(c=>({...c, deathsPerYear: e.target.value}))} />
                   <button onClick={() => updateCurrentUser({ context: { ...context } })}
-                          className={`mt-2 w-full ${themeColors.accent} ${themeColors.accentHover} text-white py-2 rounded-xl font-medium`}>
+                    className={`mt-2 w-full ${themeColors.accent} ${themeColors.accentHover} text-white py-2 rounded-xl font-medium`}>
                     {t("save")}
                   </button>
                 </div>
               </Accordion>
 
+              <Accordion title={t("exportHintTitle")} themeColors={themeColors}>
+                <div className={`${themeColors.textSecondary} text-xs mb-3`}>{t("exportHintBody")}</div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button onClick={doExport} className={`p-3 rounded-xl border ${themeColors.border} font-semibold`}>
+                    {t("exportData")}
+                  </button>
+                  <button onClick={doImport} className={`p-3 rounded-xl border ${themeColors.border} font-semibold`}>
+                    {t("importData")}
+                  </button>
+                </div>
+
+                <textarea className={`mt-2 w-full p-3 rounded-xl border ${themeColors.border} bg-transparent text-xs`}
+                  rows="4" placeholder={lang==="es" ? "Pega aquí para importar…" : "Paste here to import…"}
+                  value={importCode} onChange={(e)=>setImportCode(e.target.value)} />
+                {importMsg && <div className="mt-2 text-sm">{importMsg}</div>}
+
+                {exportCode && (
+                  <div className="mt-3">
+                    <textarea className={`w-full p-3 rounded-xl border ${themeColors.border} bg-transparent text-xs`} rows="5"
+                      value={exportCode} readOnly onFocus={(e)=>e.target.select()} />
+                    <button onClick={copyExport} className={`mt-2 w-full p-3 rounded-xl border ${themeColors.border} font-medium`}>
+                      {copyState==="copied" ? t("copied") : t("copy")}
+                    </button>
+                  </div>
+                )}
+              </Accordion>
+
+              {/* Bottom: logout */}
               <div className={`${themeColors.card} border ${themeColors.border} rounded-2xl p-4 mt-4`}>
-                <button onClick={() => { setSession(null); setShowSettings(false); setFlow("welcome"); }}
-                        className="w-full bg-red-500 hover:bg-red-600 text-white py-3 rounded-xl font-semibold">
+                <button onClick={logout} className="w-full bg-red-500 hover:bg-red-600 text-white py-3 rounded-xl font-semibold">
                   {t("logout")}
                 </button>
               </div>
@@ -652,210 +983,29 @@
         );
       }
 
-      // ================== DESIGNS (con animaciones extra) ==================
-      function weekColorFor(i) {
-        const wl = stats?.weeksLivedClamped ?? 0;
-        if (i < wl) return themeColors.hex.weekPast;
-        if (i === wl) return themeColors.hex.weekCurrent;
-        return themeColors.hex.weekFuture;
-      }
-
-      function renderGrid() {
-        const weeksPerRow = 52;
-        const cells = [];
-        for (let i = 0; i < 4160; i++) {
-          const isCurrent = i === stats.weeksLivedClamped;
-          cells.push(
-            <div key={i} className={"w-2 h-2 rounded-sm " + (isCurrent ? "animate-pulse" : "")}
-                 style={{ backgroundColor: weekColorFor(i) }} />
-          );
-        }
-        return (
-          <div className="grid gap-[2px] justify-center" style={{ gridTemplateColumns: `repeat(${weeksPerRow}, minmax(0, 0.5rem))` }}>
-            {cells}
-          </div>
-        );
-      }
-
-      function renderCircle() {
-        const W = 340, H = 340;
-        const cx = W/2, cy = H/2;
-        const rings = 80, perRing = 52;
-        const maxR = 150, minR = 35;
-        const step = (maxR - minR) / (rings - 1);
-        const dots = [];
-        for (let year = 0; year < rings; year++) {
-          const r = minR + step * year;
-          for (let w = 0; w < perRing; w++) {
-            const idx = year * perRing + w;
-            const ang = (w / perRing) * Math.PI * 2 - Math.PI/2;
-            const x = cx + r * Math.cos(ang);
-            const y = cy + r * Math.sin(ang);
-            const isCurrent = idx === stats.weeksLivedClamped;
-            dots.push(<circle key={idx} cx={x} cy={y} r={isCurrent ? 2.2 : 1.3} fill={weekColorFor(idx)} />);
-          }
-        }
-        return (
-          <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="mx-auto block">
-            <g className="svg-rotate">
-              {dots}
-            </g>
-            <text x={cx} y={cy - 4} textAnchor="middle" fontSize="32" fontWeight="800" fill={themeColors.hex.text}>
-              {stats.percentageLived}%
-            </text>
-          </svg>
-        );
-      }
-
-      function renderWave() {
-        const weeksPerRow = 52;
-        const bars = [];
-        for (let i = 0; i < 4160; i++) {
-          const col = i % weeksPerRow;
-          const base = 6, amp = 10;
-          const h = base + Math.round((Math.sin(col * 0.35) + 1) * 0.5 * amp);
-          const isCurrent = i === stats.weeksLivedClamped;
-          bars.push(
-            <div key={i} className={"w-[6px] rounded-t " + (isCurrent ? "animate-pulse" : "")}
-                 style={{ height: `${h}px`, backgroundColor: weekColorFor(i) }} />
-          );
-        }
-        return (
-          <div className="grid gap-[2px] justify-center items-end" style={{ gridTemplateColumns: `repeat(${weeksPerRow}, minmax(0, 6px))` }}>
-            {bars}
-          </div>
-        );
-      }
-
-      function renderSpiral() {
-        const W = 340, H = 340;
-        const cx = W/2, cy = H/2;
-        const turns = 14, maxR = 150;
-        const dots = [];
-        for (let i = 0; i < 4160; i++) {
-          const tt = i / 4159;
-          const ang = tt * Math.PI * 2 * turns - Math.PI/2;
-          const r = 10 + tt * (maxR - 10);
-          const x = cx + r * Math.cos(ang);
-          const y = cy + r * Math.sin(ang);
-          const isCurrent = i === stats.weeksLivedClamped;
-          dots.push(<circle key={i} cx={x} cy={y} r={isCurrent ? 2.4 : 1.1} fill={weekColorFor(i)} />);
-        }
-        return (
-          <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="mx-auto block">
-            <g className="svg-rotate">
-              {dots}
-            </g>
-          </svg>
-        );
-      }
-
-      function renderColumns() {
-        const cols = [];
-        for (let y = 0; y < 80; y++) {
-          const blocks = [];
-          for (let w = 0; w < 52; w++) {
-            const idx = y * 52 + w;
-            const isCurrent = idx === stats.weeksLivedClamped;
-            blocks.push(
-              <div key={idx} className={"w-2 h-2 rounded-[2px] " + (isCurrent ? "animate-pulse" : "")}
-                   style={{ backgroundColor: weekColorFor(idx) }} />
-            );
-          }
-          cols.push(<div key={y} className="flex flex-col-reverse gap-[2px]">{blocks}</div>);
-        }
-        return (
-          <div className="flex gap-[3px] justify-center overflow-x-auto pb-1 wiggle">
-            {cols}
-          </div>
-        );
-      }
-
-      function renderConstellation() {
-        const W=340,H=340;
-        const seed = hashToUint(currentUser.username + "|" + birthdate);
-        const rng = makeRng(seed);
-        const pts = [];
-        for (let i=0;i<4160;i++) {
-          const a = rng()*Math.PI*2;
-          const r = Math.sqrt(rng()) * 150;
-          const x = W/2 + r*Math.cos(a);
-          const y = H/2 + r*Math.sin(a);
-          const isCurrent = i === stats.weeksLivedClamped;
-          const tw = (i % 17 === 0) ? "twinkle" : "";
-          pts.push(
-            <circle key={i} cx={x} cy={y} r={isCurrent?2.6:1.1} fill={weekColorFor(i)} opacity={isCurrent?1:0.9} className={tw} />
-          );
-        }
-        return (
-          <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="mx-auto block">
-            <g className="svg-rotate">
-              {pts}
-            </g>
-          </svg>
-        );
-      }
-
-      function renderSnake() {
-        const weeksPerRow = 52;
-        const cells = [];
-        for (let row=0; row<80; row++) {
-          for (let col=0; col<52; col++) {
-            const idx = row%2===0 ? (row*52 + col) : (row*52 + (51-col));
-            const isCurrent = idx === stats.weeksLivedClamped;
-            cells.push(
-              <div key={row+"-"+col} className={"w-2 h-2 rounded-sm " + (isCurrent ? "animate-pulse" : "")}
-                   style={{ backgroundColor: weekColorFor(idx) }} />
-            );
-          }
-        }
-        return (
-          <div className="wiggle">
-            <div className="grid gap-[2px] justify-center" style={{ gridTemplateColumns: `repeat(${weeksPerRow}, minmax(0, 0.5rem))` }}>
-              {cells}
-            </div>
-          </div>
-        );
-      }
-
-      function renderDesign() {
-        if (!stats || stats.invalid) return null;
-        switch(design) {
-          case "grid": return renderGrid();
-          case "circle": return renderCircle();
-          case "wave": return renderWave();
-          case "spiral": return renderSpiral();
-          case "columns": return renderColumns();
-          case "constellation": return renderConstellation();
-          case "snake": return renderSnake();
-          default: return renderGrid();
-        }
-      }
-
-      // ================== SCREENS ==================
       function Onboarding() {
         return (
-          <div className={`min-h-screen safe-bottom ${themeColors.bg} ${themeColors.text} flex items-center justify-center p-4`}>
+          <div className={`min-h-screen safe-bottom safe-top ${themeColors.bg} ${themeColors.text} flex items-center justify-center p-4`}>
             <div className="max-w-md w-full">
-              <h1 className="text-3xl font-bold text-center">{I18N[lang].onboardingTitle}</h1>
-              <p className={`${themeColors.textSecondary} text-center mt-2 mb-6`}>{I18N[lang].onboardingSubtitle}</p>
+              <h1 className="text-3xl font-bold text-center">{t("appTitle")}</h1>
+              <p className={`${themeColors.textSecondary} text-center mt-2 mb-6`}>{t("appSubtitle")}</p>
 
               <div className={`${themeColors.card} border ${themeColors.border} rounded-2xl p-5`}>
                 {flow === "welcome" && (
                   <div className="space-y-3 fade-in">
-                    <div className="font-semibold">{I18N[lang].chooseAuth}</div>
+                    <div className="font-semibold">{t("chooseAuth")}</div>
                     <button onClick={() => setFlow("register")}
                       className={`w-full ${themeColors.accent} ${themeColors.accentHover} text-white py-3 rounded-xl font-semibold`}>
-                      {I18N[lang].createNew}
+                      {t("createNew")}
                     </button>
                     <button onClick={() => setFlow("login")}
                       className={`w-full border ${themeColors.border} py-3 rounded-xl font-semibold`}>
-                      {I18N[lang].alreadyHave}
+                      {t("alreadyHave")}
                     </button>
 
                     <button onClick={() => setShowSettings(true)}
                       className={`mt-2 w-full p-3 rounded-xl border ${themeColors.border} font-medium`}>
-                      {I18N[lang].settings}
+                      {t("settings")}
                     </button>
                   </div>
                 )}
@@ -863,32 +1013,29 @@
                 {(flow === "register" || flow === "login") && (
                   <div className="space-y-3 fade-in">
                     <div className="flex items-center justify-between">
-                      <div className="font-semibold">{flow === "register" ? I18N[lang].register : I18N[lang].login}</div>
-                      <button onClick={() => setFlow("welcome")} className={themeColors.textSecondary}>{I18N[lang].back}</button>
+                      <div className="font-semibold">{flow === "register" ? t("register") : t("login")}</div>
+                      <button onClick={() => setFlow("welcome")} className={themeColors.textSecondary}>{lang==="es" ? "Atrás" : "Back"}</button>
                     </div>
 
                     <input className={`w-full p-3 rounded-xl border ${themeColors.border} bg-transparent`}
-                      placeholder={I18N[lang].username}
-                      value={authUser}
+                      placeholder={t("username")} value={authUser}
                       onChange={(e) => setAuthUser(e.target.value)}
                       autoCapitalize="none" autoCorrect="off" />
 
                     <input className={`w-full p-3 rounded-xl border ${themeColors.border} bg-transparent`}
-                      placeholder={I18N[lang].password}
-                      type="password"
-                      value={authPass}
-                      onChange={(e) => setAuthPass(e.target.value)} />
+                      placeholder={t("password")} type="password"
+                      value={authPass} onChange={(e) => setAuthPass(e.target.value)} />
 
                     {authMsg && <div className="text-sm text-red-600">{authMsg}</div>}
 
                     <button onClick={flow === "register" ? doRegister : doLogin}
                       className={`w-full ${themeColors.accent} ${themeColors.accentHover} text-white py-3 rounded-xl font-semibold`}>
-                      {flow === "register" ? I18N[lang].register : I18N[lang].login}
+                      {flow === "register" ? t("register") : t("login")}
                     </button>
 
                     <button onClick={() => setShowSettings(true)}
                       className={`w-full p-3 rounded-xl border ${themeColors.border} font-medium`}>
-                      {I18N[lang].settings}
+                      {t("settings")}
                     </button>
                   </div>
                 )}
@@ -900,29 +1047,28 @@
 
       function BirthdateStep() {
         return (
-          <div className={`min-h-screen safe-bottom ${themeColors.bg} ${themeColors.text} flex items-center justify-center p-4`}>
+          <div className={`min-h-screen safe-bottom safe-top ${themeColors.bg} ${themeColors.text} flex items-center justify-center p-4`}>
             <div className="max-w-md w-full">
               <div className="flex justify-between items-center mb-4">
                 <div>
-                  <div className="text-2xl font-bold">{I18N[lang].setBirthdate}</div>
+                  <div className="text-2xl font-bold">{t("setBirthdate")}</div>
                   <div className={`${themeColors.textSecondary} text-sm`}>{currentUser?.username}</div>
                 </div>
-                <button onClick={() => setShowSettings(true)} className={themeColors.textSecondary} aria-label={I18N[lang].settings}>
+                <button onClick={() => setShowSettings(true)} className={themeColors.textSecondary} aria-label={t("settings")}>
                   <SettingsIcon />
                 </button>
               </div>
 
               <div className={`${themeColors.card} border ${themeColors.border} rounded-2xl p-5`}>
-                <label className="block mb-2 font-medium">{I18N[lang].whenBorn}</label>
+                <label className="block mb-2 font-medium">{t("whenBorn")}</label>
                 <input type="date"
                   className={`w-full p-3 rounded-xl border ${themeColors.border} bg-transparent`}
-                  value={tempBirthdate}
-                  onChange={(e) => setTempBirthdate(e.target.value)} />
+                  value={tempBirthdate} onChange={(e) => setTempBirthdate(e.target.value)} />
                 {dateError && <div className="mt-2 text-sm text-red-600">{dateError}</div>}
 
                 <button onClick={saveBirthdate} disabled={!tempBirthdate}
                   className={`mt-3 w-full ${themeColors.accent} ${themeColors.accentHover} text-white py-3 rounded-xl font-semibold disabled:opacity-50`}>
-                  {I18N[lang].done}
+                  {t("done")}
                 </button>
               </div>
             </div>
@@ -938,20 +1084,37 @@
         const socialLines = dailyInsights?.social || [];
         const cosmicLines = dailyInsights?.cosmic || [];
         const natureLines = dailyInsights?.nature || [];
-
         const highlights = lifeHighlightsLines(lang, stats);
 
         return (
-          <div className={`min-h-screen safe-bottom ${themeColors.bg} ${themeColors.text}`}>
-            <div className="max-w-md mx-auto p-4 pt-8">
+          <div className={`min-h-screen safe-bottom safe-top ${themeColors.bg} ${themeColors.text}`}>
+            <div className="max-w-md mx-auto p-4 pt-6">
+
+              {showBirthdayCard && (
+                <div className="rounded-2xl p-4 border border-black/10 mb-4 fade-in"
+                  style={{ background:"linear-gradient(135deg, rgba(255,255,255,0.9), rgba(255,255,255,0.55))" }}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 font-semibold"><PartyIcon /> {t("birthdayTitle")}</div>
+                    <button onClick={dismissBirthdayCard} className="text-sm text-gray-600">{t("birthdayDismiss")}</button>
+                  </div>
+                  <div className="text-sm text-gray-700 mt-2">
+                    {lang==="es" ? "Tienes una carta basada en tu año (según tus emociones)." : "You have a letter based on your year (from your moods)."}
+                  </div>
+                  <button onClick={() => { setShowBirthdayModal(true); updateCurrentUser({ birthdayShownISO: isoToday() }); setShowBirthdayCard(false); }}
+                    className={`mt-3 w-full ${themeColors.accent} ${themeColors.accentHover} text-white py-2 rounded-xl font-semibold`}>
+                    {t("birthdayOpen")}
+                  </button>
+                </div>
+              )}
+
               <div className="flex justify-between items-center mb-6">
                 <div>
-                  <h1 className="text-2xl font-bold">{I18N[lang].yourLife}</h1>
+                  <h1 className="text-2xl font-bold">{t("yourLife")}</h1>
                   <p className={themeColors.textSecondary + " text-sm"}>
                     {stats.yearsLived} {lang==="es" ? "años" : "years"}, {stats.monthsLived} {lang==="es" ? "meses" : "months"}
                   </p>
                 </div>
-                <button onClick={() => setShowSettings(true)} className={themeColors.textSecondary} aria-label={I18N[lang].settings}>
+                <button onClick={() => setShowSettings(true)} className={themeColors.textSecondary} aria-label={t("settings")}>
                   <SettingsIcon />
                 </button>
               </div>
@@ -964,110 +1127,153 @@
               <div className={`${themeColors.card} border ${themeColors.border} rounded-2xl p-5 mb-4`}>
                 <div className="design-shell">
                   <div className="design-shell-inner">
-                    {renderDesign()}
+                    {designNode}
                   </div>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <div className={`${themeColors.card} border ${themeColors.border} p-4 rounded-2xl`}>
-                  <div className={`${themeColors.textSecondary} text-sm`}>{I18N[lang].weeksLived}</div>
+                  <div className={`${themeColors.textSecondary} text-sm`}>{t("weeksLived")}</div>
                   <div className="text-2xl font-bold">{stats.weeksLived.toLocaleString()}</div>
                 </div>
                 <div className={`${themeColors.card} border ${themeColors.border} p-4 rounded-2xl`}>
-                  <div className={`${themeColors.textSecondary} text-sm`}>{I18N[lang].daysLived}</div>
+                  <div className={`${themeColors.textSecondary} text-sm`}>{t("daysLived")}</div>
                   <div className="text-2xl font-bold">{stats.daysLived.toLocaleString()}</div>
                 </div>
               </div>
 
               <div className={`${themeColors.card} border ${themeColors.border} p-6 rounded-2xl mb-4`}>
                 <div className="flex justify-between items-center mb-2">
-                  <span className={themeColors.textSecondary}>{I18N[lang].lifeProgress}</span>
+                  <span className={themeColors.textSecondary}>{t("lifeProgress")}</span>
                   <span className="text-2xl font-bold">{stats.percentageLived}%</span>
                 </div>
                 <div className={`w-full rounded-full h-3 overflow-hidden ${themeColors.track}`}>
                   <div className={`${themeColors.accent} h-full rounded-full transition-all duration-700`} style={{ width: `${stats.percentageLived}%` }} />
                 </div>
                 <div className={`${themeColors.textSecondary} text-sm mt-3`}>
-                  {I18N[lang].weeksLeft} {stats.weeksRemaining.toLocaleString()} {I18N[lang].weeks}
+                  {t("weeksLeft")} {stats.weeksRemaining.toLocaleString()} {t("weeks")}
                 </div>
               </div>
 
-              <!-- LIFE HIGHLIGHTS (lo que me pediste que NO quitara) -->
+              {/* Life highlights (NO rotan) */}
               <div className={`${themeColors.card} border ${themeColors.border} p-6 rounded-2xl mb-4`}>
-                <div className="font-semibold mb-2">{I18N[lang].highlights}</div>
+                <div className="font-semibold mb-2">{t("highlights")}</div>
                 <ul className={`space-y-2 ${themeColors.textSecondary}`}>
                   {highlights.map((l,i) => <li key={i} className="text-sm leading-relaxed">• {l}</li>)}
                 </ul>
               </div>
 
+              {/* Mood */}
               <div className={`${themeColors.card} border ${themeColors.border} p-6 rounded-2xl mb-4`}>
                 <div className="flex justify-between items-center mb-2">
-                  <span className="font-semibold">{I18N[lang].mood}</span>
-                  <span className={`${themeColors.textSecondary} text-xs`}>{I18N[lang].history90}</span>
+                  <span className="font-semibold">{t("mood")}</span>
+                  <span className={`${themeColors.textSecondary} text-xs`}>{t("history90")}</span>
                 </div>
 
-                <div className="grid grid-cols-15 gap-[3px]" style={{ gridTemplateColumns: "repeat(15, minmax(0, 1fr))" }}>
+                <div className="grid gap-[3px]" style={{ gridTemplateColumns: "repeat(15, minmax(0, 1fr))" }}>
                   {moodCells.map((d) => {
                     const mood = moodById(d.id);
                     const col = mood ? mood.color : (theme === "dark" || theme === "neon" ? "#0b0b0f" : "#e5e7eb");
                     return (
                       <div key={d.iso} className="w-full aspect-square rounded-[3px]"
-                           style={{ backgroundColor: col }}
-                           title={`${d.iso}${mood ? " · " + (mood.label[lang] || mood.label.en) : ""}`} />
+                        style={{ backgroundColor: col }}
+                        title={`${d.iso}${mood ? " · " + (mood.label[lang] || mood.label.en) : ""}`} />
                     );
                   })}
                 </div>
 
                 <button onClick={() => setShowMoodModal(true)}
                   className={`mt-4 w-full p-3 rounded-xl border ${themeColors.border} font-semibold`}>
-                  {I18N[lang].moodLogNow}
+                  {t("moodLogNow")}
                 </button>
               </div>
 
-              <Accordion title={I18N[lang].societal} themeColors={themeColors}>
+              {/* Rotating context */}
+              <Accordion title={t("societal")} themeColors={themeColors}>
                 <ul className={`space-y-2 ${themeColors.textSecondary}`}>
                   {socialLines.map((l,i) => <li key={i} className="text-sm leading-relaxed">• {l}</li>)}
                 </ul>
               </Accordion>
-
-              <Accordion title={I18N[lang].cosmic} themeColors={themeColors}>
+              <Accordion title={t("cosmic")} themeColors={themeColors}>
                 <ul className={`space-y-2 ${themeColors.textSecondary}`}>
                   {cosmicLines.map((l,i) => <li key={i} className="text-sm leading-relaxed">• {l}</li>)}
                 </ul>
               </Accordion>
-
-              <Accordion title={I18N[lang].nature} themeColors={themeColors}>
+              <Accordion title={t("nature")} themeColors={themeColors}>
                 <ul className={`space-y-2 ${themeColors.textSecondary}`}>
                   {natureLines.map((l,i) => <li key={i} className="text-sm leading-relaxed">• {l}</li>)}
                 </ul>
               </Accordion>
             </div>
 
+            {/* Mood modal */}
             <Modal open={showMoodModal} onClose={() => setShowMoodModal(false)}>
-              <div className="mb-2 text-lg font-bold">{I18N[lang].moodTodayTitle}</div>
-              <div className="text-sm text-gray-600 mb-3">{I18N[lang].moodTodaySubtitle}</div>
+              <div className="mb-2 text-lg font-bold">{t("moodTodayTitle")}</div>
+              <div className="text-sm text-gray-600 mb-3">{t("moodTodaySubtitle")}</div>
               <div className="grid grid-cols-2 gap-2">
                 {MOODS.map(m => (
                   <PillButton key={m.id} label={m.label[lang] || m.label.en} color={m.color} onClick={() => saveMood(m.id)} />
                 ))}
               </div>
               <button onClick={() => setShowMoodModal(false)} className="mt-3 w-full p-3 rounded-xl border border-black/10 font-medium">
-                {I18N[lang].skip}
+                {t("skip")}
               </button>
+            </Modal>
+
+            {/* Birthday modal placeholder (simple) */}
+            <Modal open={showBirthdayModal} onClose={() => setShowBirthdayModal(false)}>
+              <div className="text-lg font-bold mb-2">{t("birthdayLetter")}</div>
+              <div className="text-sm text-gray-700">
+                {lang==="es"
+                  ? "Carta decorada (versión final). Si quieres la carta larga con recomendaciones por emociones, te la integro aquí en el siguiente mensaje."
+                  : "Decorated letter (final version). If you want the long letter with mood-based recommendations, I’ll integrate it here next."}
+              </div>
             </Modal>
           </div>
         );
       }
 
+      // Router
       if (showSettings && currentUser) return <SettingsScreen />;
       if (!currentUser) return <Onboarding />;
       if (flow === "setBirthdate" || !birthdate) return <BirthdateStep />;
       return <Home />;
     }
 
+    // ================== APP WRAPPER (error-safe) ==================
+    function AppWithSafety() {
+      const [lang, setLang] = useState("es");
+      const fallback = (error) => {
+        const t = (k) => I18N[lang]?.[k] ?? I18N.en?.[k] ?? k;
+        return (
+          <div className="min-h-screen safe-bottom safe-top bg-white text-gray-900 flex items-center justify-center p-4">
+            <div className="max-w-md w-full border border-gray-200 rounded-2xl p-5 bg-gray-50">
+              <div className="text-2xl font-bold mb-2">{t("errorTitle")}</div>
+              <div className="text-sm text-gray-700 mb-4">{t("errorBody")}</div>
+              <button
+                onClick={() => { safeDel(KEYS.session); safeDel(KEYS.users); location.reload(); }}
+                className="w-full bg-red-500 hover:bg-red-600 text-white py-3 rounded-xl font-semibold"
+              >
+                {t("reset")}
+              </button>
+              <div className="text-xs text-gray-500 mt-3 break-words">
+                {String(error || "")}
+              </div>
+            </div>
+          </div>
+        );
+      };
+
+      return (
+        <ErrorBoundary fallback={fallback}>
+          <App />
+        </ErrorBoundary>
+      );
+    }
+
     const root = ReactDOM.createRoot(document.getElementById("root"));
-    root.render(<App />);
+    root.render(<AppWithSafety />);
   </script>
 </body>
 </html>
