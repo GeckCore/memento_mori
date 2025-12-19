@@ -20,25 +20,11 @@
       -webkit-user-select: none;
       user-select: none;
     }
-    input { -webkit-user-select: text; user-select: text; }
-
+    input, textarea { -webkit-user-select: text; user-select: text; }
     html, body { height: 100%; }
-    body {
-      margin: 0;
-      overflow-x: hidden;
-      background: #fff;
-      /* Evita el “100vh bug” en móviles */
-      min-height: 100dvh;
-    }
-
-    #root {
-      min-height: 100dvh;
-    }
-
-    /* Un poco de aire para notch / barras */
-    .safe-bottom {
-      padding-bottom: calc(1rem + env(safe-area-inset-bottom));
-    }
+    body { margin: 0; overflow-x: hidden; min-height: 100dvh; }
+    #root { min-height: 100dvh; }
+    .safe-bottom { padding-bottom: calc(1rem + env(safe-area-inset-bottom)); }
   </style>
 </head>
 <body>
@@ -47,7 +33,7 @@
   <script type="text/babel">
     const { useEffect, useMemo, useRef, useState } = React;
 
-    // ====== Iconos (simples) ======
+    // =================== ICONS ===================
     const SettingsIcon = () => (
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
         <circle cx="12" cy="12" r="3"></circle>
@@ -89,47 +75,60 @@
       </svg>
     );
 
-    // ====== Storage seguro (WebView / APK wrappers) ======
-    const STORAGE = {
-      birthdate: "wol_birthdate",
-      theme: "wol_theme",
-      design: "wol_design",
+    // =================== SAFE STORAGE ===================
+    const KEYS = {
+      session: "wol_session_v1",      // { username }
+      users: "wol_users_v1",          // { [username]: userRecord }
     };
 
-    function safeGet(key) {
-      try { return localStorage.getItem(key); } catch { return null; }
-    }
-    function safeSet(key, value) {
-      try { localStorage.setItem(key, value); } catch {}
-    }
-    function safeRemove(key) {
-      try { localStorage.removeItem(key); } catch {}
+    function safeGet(key) { try { return localStorage.getItem(key); } catch { return null; } }
+    function safeSet(key, val) { try { localStorage.setItem(key, val); } catch {} }
+
+    function loadJSON(key, fallback) {
+      const raw = safeGet(key);
+      if (!raw) return fallback;
+      try { return JSON.parse(raw); } catch { return fallback; }
     }
 
-    // ====== Helpers de fecha (evita desfases) ======
+    function saveJSON(key, obj) { safeSet(key, JSON.stringify(obj)); }
+
+    function clamp(n, a, b) { return Math.min(b, Math.max(a, n)); }
+
+    function formatInt(n) {
+      const x = Math.round(n);
+      return x.toLocaleString(undefined);
+    }
+
+    // =================== DATE HELPERS ===================
     function parseISODateToLocalMidnight(iso) {
-      // iso: "YYYY-MM-DD"
       const parts = (iso || "").split("-");
       if (parts.length !== 3) return null;
-      const y = Number(parts[0]);
-      const m = Number(parts[1]);
-      const d = Number(parts[2]);
+      const y = Number(parts[0]), m = Number(parts[1]), d = Number(parts[2]);
       if (!y || !m || !d) return null;
-
-      // Local time, midnight (no UTC parsing)
       const dt = new Date(y, m - 1, d, 0, 0, 0, 0);
       if (Number.isNaN(dt.getTime())) return null;
       return dt;
     }
 
-    function clamp(n, a, b) {
-      return Math.min(b, Math.max(a, n));
+    function isoToday() {
+      const now = new Date();
+      const y = now.getFullYear();
+      const m = String(now.getMonth() + 1).padStart(2, "0");
+      const d = String(now.getDate()).padStart(2, "0");
+      return `${y}-${m}-${d}`;
     }
 
-    // ====== Temas (clases + hex para SVG) ======
+    // =================== CRYPTO (SHA-256) ===================
+    async function sha256Hex(text) {
+      const enc = new TextEncoder().encode(text);
+      const buf = await crypto.subtle.digest("SHA-256", enc);
+      return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
+    }
+
+    // =================== THEMES ===================
     const THEMES = {
       minimal: {
-        label: "Minimal",
+        label: { es: "Minimal", en: "Minimal" },
         bg: "bg-white",
         text: "text-gray-900",
         textSecondary: "text-gray-600",
@@ -138,7 +137,6 @@
         accent: "bg-gray-900",
         accentHover: "hover:bg-gray-800",
         track: "bg-gray-200",
-        // Hex para render (SVG + styles)
         hex: {
           text: "#111827",
           textSecondary: "#4b5563",
@@ -150,7 +148,7 @@
         },
       },
       dark: {
-        label: "Oscuro",
+        label: { es: "Oscuro", en: "Dark" },
         bg: "bg-gray-950",
         text: "text-gray-100",
         textSecondary: "text-gray-400",
@@ -170,7 +168,7 @@
         },
       },
       warm: {
-        label: "Cálido",
+        label: { es: "Cálido", en: "Warm" },
         bg: "bg-amber-50",
         text: "text-amber-950",
         textSecondary: "text-amber-700",
@@ -190,7 +188,7 @@
         },
       },
       ocean: {
-        label: "Océano",
+        label: { es: "Océano", en: "Ocean" },
         bg: "bg-sky-50",
         text: "text-slate-900",
         textSecondary: "text-slate-600",
@@ -211,142 +209,563 @@
       },
     };
 
-    function WeeksOfLife() {
-      const [birthdate, setBirthdate] = useState("");
-      const [tempBirthdate, setTempBirthdate] = useState("");
-      const [stats, setStats] = useState(null);
+    // =================== I18N ===================
+    const I18N = {
+      es: {
+        appTitle: "Tu vida en semanas",
+        appSubtitle: "Visualiza el tiempo que has vivido (80 años = 4160 semanas)",
+        whenBorn: "¿Cuándo naciste?",
+        start: "Comenzar",
+        settings: "Ajustes",
+        theme: "Tema",
+        design: "Diseño",
+        grid: "Cuadrícula",
+        circle: "Círculo",
+        wave: "Ondas",
+        spiral: "Espiral",
+        birthSaved: "Guardada",
+        resetBirth: "Restablecer fecha",
+        yourLife: "Tu vida",
+        lived: "vivido",
+        weeksLived: "Semanas vividas",
+        daysLived: "Días vividos",
+        lifeProgress: "Progreso de vida",
+        weeksLeft: "Te quedan aproximadamente",
+        weeks: "semanas",
+        error: "Error",
+        invalidFuture: "La fecha de nacimiento no puede ser en el futuro.",
+        close: "Cerrar",
+        language: "Idioma",
+        spanish: "Español",
+        english: "Inglés",
+        profile: "Perfil",
+        username: "Usuario",
+        password: "Contraseña",
+        register: "Crear cuenta",
+        login: "Iniciar sesión",
+        logout: "Cerrar sesión",
+        loggedAs: "Sesión: ",
+        export: "Exportar",
+        import: "Importar",
+        exportHint: "Copia este código y pégalo en otro dispositivo.",
+        importHint: "Pega aquí un código exportado y pulsa Importar.",
+        importOk: "Perfil importado. Ya puedes iniciar sesión.",
+        wrongLogin: "Usuario o contraseña incorrectos.",
+        userExists: "Ese usuario ya existe.",
+        needUser: "Crea cuenta o inicia sesión para usar estados de ánimo y sincronización.",
+        todayMoodTitle: "¿Cómo estás hoy?",
+        todayMoodSubtitle: "Un toque y queda guardado.",
+        saveMood: "Guardar",
+        skip: "Ahora no",
+        moodTracker: "Estado de ánimo",
+        moodLegend: "Historial (últimos 90 días)",
+        highlights: "Life highlights",
+        societal: "Contexto social",
+        cosmic: "Perspectiva cósmica",
+        nature: "Mundo natural",
+        estimates: "Valores aproximados (ajustables en tu perfil).",
+        assumptions: "Suposiciones",
+        assumptionsBody: "Pulso 72 bpm · respiración 16/min · sueño 8h/día · vida base 80 años.",
+        contextSettings: "Ajustes de contexto",
+        populationAtBirth: "Población mundial al nacer",
+        populationNow: "Población mundial actual",
+        birthsPerYear: "Nacimientos globales por año",
+        deathsPerYear: "Muertes globales por año",
+        save: "Guardar",
+      },
+      en: {
+        appTitle: "Your life in weeks",
+        appSubtitle: "Visualize the time you've lived (80 years = 4,160 weeks)",
+        whenBorn: "When were you born?",
+        start: "Start",
+        settings: "Settings",
+        theme: "Theme",
+        design: "Design",
+        grid: "Grid",
+        circle: "Circle",
+        wave: "Waves",
+        spiral: "Spiral",
+        birthSaved: "Saved",
+        resetBirth: "Reset birthdate",
+        yourLife: "Your life",
+        lived: "lived",
+        weeksLived: "Weeks lived",
+        daysLived: "Days lived",
+        lifeProgress: "Life progress",
+        weeksLeft: "You have approximately",
+        weeks: "weeks left",
+        error: "Error",
+        invalidFuture: "Birthdate cannot be in the future.",
+        close: "Close",
+        language: "Language",
+        spanish: "Spanish",
+        english: "English",
+        profile: "Profile",
+        username: "Username",
+        password: "Password",
+        register: "Create account",
+        login: "Log in",
+        logout: "Log out",
+        loggedAs: "Session: ",
+        export: "Export",
+        import: "Import",
+        exportHint: "Copy this code and paste it on another device.",
+        importHint: "Paste an exported code here and press Import.",
+        importOk: "Profile imported. You can now log in.",
+        wrongLogin: "Wrong username or password.",
+        userExists: "That user already exists.",
+        needUser: "Create an account or log in to use moods and portability.",
+        todayMoodTitle: "How are you today?",
+        todayMoodSubtitle: "Tap once and it’s saved.",
+        saveMood: "Save",
+        skip: "Not now",
+        moodTracker: "Mood",
+        moodLegend: "History (last 90 days)",
+        highlights: "Life highlights",
+        societal: "Societal context",
+        cosmic: "Cosmic perspective",
+        nature: "Natural world",
+        estimates: "Approximate values (adjustable in your profile).",
+        assumptions: "Assumptions",
+        assumptionsBody: "Heart rate 72 bpm · breathing 16/min · sleep 8h/day · baseline 80-year life.",
+        contextSettings: "Context settings",
+        populationAtBirth: "World population at birth",
+        populationNow: "Current world population",
+        birthsPerYear: "Global births per year",
+        deathsPerYear: "Global deaths per year",
+        save: "Save",
+      }
+    };
+
+    // =================== MOODS ===================
+    const MOODS = [
+      { id: "happy",     label: { es: "Contento",   en: "Happy" },     color: "#22c55e" },
+      { id: "calm",      label: { es: "Calmado",    en: "Calm" },      color: "#06b6d4" },
+      { id: "focused",   label: { es: "Enfocado",   en: "Focused" },   color: "#3b82f6" },
+      { id: "tired",     label: { es: "Cansado",    en: "Tired" },     color: "#a3a3a3" },
+      { id: "sad",       label: { es: "Triste",     en: "Sad" },       color: "#6366f1" },
+      { id: "angry",     label: { es: "Enfadado",   en: "Angry" },     color: "#ef4444" },
+      { id: "anxious",   label: { es: "Ansioso",    en: "Anxious" },   color: "#f59e0b" },
+      { id: "grateful",  label: { es: "Agradecido", en: "Grateful" },  color: "#eab308" },
+    ];
+
+    function moodById(id) { return MOODS.find(m => m.id === id) || null; }
+
+    // =================== VOICE / PERSONALITY ===================
+    function voicePack({ theme, design, lang }) {
+      const L = lang;
+      const packs = {
+        grid: {
+          minimal: {
+            es: ["Preciso. Ordenado. Medible.", "Aquí no hay drama: solo semanas."],
+            en: ["Precise. Structured. Measurable.", "No drama: just weeks."]
+          },
+          dark: {
+            es: ["Frío, claro, inevitable.", "Cada punto es una decisión que ya pasó."],
+            en: ["Cold, clear, inevitable.", "Each dot is a choice already made."]
+          },
+          warm: {
+            es: ["Paso a paso. Suma y sigue.", "No es presión: es perspectiva."],
+            en: ["Step by step. Add it up.", "Not pressure—perspective."]
+          },
+          ocean: {
+            es: ["Calma. Ritmo. Constancia.", "Tu tiempo también respira."],
+            en: ["Calm. Rhythm. Consistency.", "Your time also breathes."]
+          },
+        },
+        circle: {
+          minimal: {
+            es: ["Visto desde arriba, todo encaja.", "Años como anillos. Semanas como granos."],
+            en: ["From above, it fits.", "Years as rings. Weeks as grains."]
+          },
+          dark: {
+            es: ["Un círculo no juzga.", "Solo muestra lo que ya giró."],
+            en: ["A circle doesn’t judge.", "It only shows what already turned."]
+          },
+          warm: {
+            es: ["Ciclos. Estaciones. Repetición útil.", "Vives más de lo que crees."],
+            en: ["Cycles. Seasons. Useful repetition.", "You live more than you think."]
+          },
+          ocean: {
+            es: ["Todo vuelve.", "Y tú sigues aquí."],
+            en: ["Everything returns.", "And you’re still here."]
+          },
+        },
+        wave: {
+          minimal: {
+            es: ["Sube. Baja. Sigue.", "Así se mueve una vida real."],
+            en: ["Up. Down. Continue.", "That’s a real life."]
+          },
+          dark: {
+            es: ["No hay línea recta.", "Solo oscilación y avance."],
+            en: ["No straight line.", "Just oscillation and forward motion."]
+          },
+          warm: {
+            es: ["Altibajos normales.", "Lo importante es la dirección."],
+            en: ["Normal ups and downs.", "Direction matters."]
+          },
+          ocean: {
+            es: ["Marea tranquila.", "Respiras y avanzas."],
+            en: ["A quiet tide.", "You breathe and move."]
+          },
+        },
+        spiral: {
+          minimal: {
+            es: ["Una ruta, no un bloque.", "La espiral no se repite: progresa."],
+            en: ["A path, not a block.", "A spiral doesn’t repeat: it progresses."]
+          },
+          dark: {
+            es: ["Un viaje comprimido.", "La distancia asusta menos en puntos."],
+            en: ["A compressed journey.", "Distance is less scary as dots."]
+          },
+          warm: {
+            es: ["Te estás construyendo.", "Cada vuelta suma."],
+            en: ["You’re building yourself.", "Each turn adds."]
+          },
+          ocean: {
+            es: ["Suave. Continuo.", "No hace falta correr."],
+            en: ["Soft. Continuous.", "No need to rush."]
+          },
+        },
+      };
+
+      const d = packs[design] || packs.grid;
+      const t = d[theme] || d.minimal;
+      return t[L] || t.en;
+    }
+
+    // =================== CALCULATIONS ===================
+    function computeStats(birthISO) {
+      const birth = parseISODateToLocalMidnight(birthISO);
+      if (!birth) return null;
+      const now = new Date();
+      if (birth.getTime() > now.getTime()) {
+        return { invalid: true, messageKey: "invalidFuture" };
+      }
+
+      const msDay = 86400000;
+      const msWeek = msDay * 7;
+
+      const diffMs = now.getTime() - birth.getTime();
+      const daysLived = Math.floor(diffMs / msDay);
+      const weeksLived = Math.floor(diffMs / msWeek);
+
+      const totalWeeks = 4160;
+      const weeksLivedClamped = clamp(weeksLived, 0, totalWeeks);
+      const weeksRemaining = Math.max(0, totalWeeks - weeksLivedClamped);
+      const percentageLived = clamp(Math.round((weeksLivedClamped / totalWeeks) * 100), 0, 100);
+
+      const yearsLived = Math.floor(daysLived / 365.2425);
+      const monthsLived = Math.floor((daysLived % 365.2425) / 30.436875);
+
+      // Highlights (assumptions)
+      const minutesLived = Math.floor(diffMs / 60000);
+      const heartBeats = minutesLived * 72; // 72 bpm
+      const breaths = minutesLived * 16;    // 16/min
+      const sleepHours = daysLived * 8;     // 8h/day
+
+      const seasons = Math.floor(daysLived / (365.2425 / 4)); // ~91.31 days
+      const lunarCycles = Math.floor(daysLived / 29.53059);
+      const tripsAroundSun = Math.floor(daysLived / 365.2425);
+
+      // Distances (approx)
+      const AU_KM = 149_597_870.7;
+      const earthOrbitKmPerYear = 2 * Math.PI * AU_KM; // ~ 940M km/year
+      const earthAroundSunKm = (daysLived / 365.2425) * earthOrbitKmPerYear;
+
+      const secondsLived = Math.floor(diffMs / 1000);
+      const solarSystemKm = secondsLived * 220; // ~220 km/s around galaxy
+
+      // Universe age ratio (approx): universe ~ 13.8 billion years
+      const universeAgeYears = 13_800_000_000;
+      const lifespanPercentOfUniverse = ((daysLived / 365.2425) / universeAgeYears) * 100;
+
+      return {
+        invalid: false,
+        birth,
+        now,
+        totalWeeks,
+        weeksLived,
+        weeksLivedClamped,
+        weeksRemaining,
+        percentageLived,
+        daysLived,
+        yearsLived,
+        monthsLived,
+
+        heartBeats,
+        breaths,
+        sleepHours,
+        seasons,
+        lunarCycles,
+        tripsAroundSun,
+        earthAroundSunKm,
+        solarSystemKm,
+        lifespanPercentOfUniverse,
+      };
+    }
+
+    // =================== MAIN APP ===================
+    function App() {
+      const [users, setUsers] = useState(() => loadJSON(KEYS.users, {}));
+      const [session, setSession] = useState(() => loadJSON(KEYS.session, null)); // { username }
+      const currentUser = session?.username ? users[session.username] : null;
+
+      // UI state
       const [showSettings, setShowSettings] = useState(false);
-      const [theme, setTheme] = useState("minimal");
-      const [design, setDesign] = useState("grid");
+      const [lang, setLang] = useState(currentUser?.prefs?.lang || "es");
+      const [theme, setTheme] = useState(currentUser?.prefs?.theme || "minimal");
+      const [design, setDesign] = useState(currentUser?.prefs?.design || "grid");
+      const [birthdate, setBirthdate] = useState(currentUser?.birthdate || "");
+      const [tempBirthdate, setTempBirthdate] = useState("");
+
+      const [stats, setStats] = useState(() => (birthdate ? computeStats(birthdate) : null));
       const [error, setError] = useState("");
 
-      // Carga inicial
+      // Auth fields
+      const [authUser, setAuthUser] = useState("");
+      const [authPass, setAuthPass] = useState("");
+      const [authMsg, setAuthMsg] = useState("");
+
+      // Import/Export
+      const [exportCode, setExportCode] = useState("");
+      const [importCode, setImportCode] = useState("");
+      const [importMsg, setImportMsg] = useState("");
+
+      // Mood modal
+      const [showMoodModal, setShowMoodModal] = useState(false);
+      const [todayMood, setTodayMood] = useState(null);
+
+      // Context settings
+      const defaultContext = {
+        populationAtBirth: 6_900_000_000,
+        populationNow: 8_100_000_000,
+        birthsPerYear: 140_000_000,
+        deathsPerYear: 60_000_000,
+      };
+      const [context, setContext] = useState(currentUser?.context || defaultContext);
+
+      // Derived
+      const themeColors = useMemo(() => THEMES[theme] || THEMES.minimal, [theme]);
+      const t = (key) => (I18N[lang] && I18N[lang][key]) ? I18N[lang][key] : (I18N.en[key] || key);
+      const voice = useMemo(() => voicePack({ theme, design, lang }), [theme, design, lang]);
+
+      // Persist users + session
+      useEffect(() => { saveJSON(KEYS.users, users); }, [users]);
+      useEffect(() => { saveJSON(KEYS.session, session); }, [session]);
+
+      // When session/user changes, load their prefs
       useEffect(() => {
-        const savedBirthdate = safeGet(STORAGE.birthdate);
-        const savedTheme = safeGet(STORAGE.theme);
-        const savedDesign = safeGet(STORAGE.design);
+        const u = session?.username ? users[session.username] : null;
+        if (!u) return;
 
-        if (savedTheme && THEMES[savedTheme]) setTheme(savedTheme);
-        if (savedDesign) setDesign(savedDesign);
+        setLang(u.prefs?.lang || "es");
+        setTheme(u.prefs?.theme || "minimal");
+        setDesign(u.prefs?.design || "grid");
+        setBirthdate(u.birthdate || "");
+        setContext(u.context || defaultContext);
+      }, [session?.username]);
 
-        if (savedBirthdate) {
-          setBirthdate(savedBirthdate);
-          const s = calculateStats(savedBirthdate);
-          setStats(s);
-        }
-      }, []);
-
-      // Recalcular (por si cambia día/semana) cada 1h
+      // Recompute stats (hourly)
       useEffect(() => {
-        if (!birthdate) return;
-        const tick = () => setStats(calculateStats(birthdate));
+        if (!birthdate) { setStats(null); return; }
+        const tick = () => setStats(computeStats(birthdate));
         tick();
         const id = setInterval(tick, 1000 * 60 * 60);
         return () => clearInterval(id);
       }, [birthdate]);
 
-      const themeColors = useMemo(() => THEMES[theme] || THEMES.minimal, [theme]);
-
-      function calculateStats(isoDate) {
-        const birth = parseISODateToLocalMidnight(isoDate);
-        if (!birth) return null;
-
-        const now = new Date();
-
-        // Validación: si la fecha es futura, no tiene sentido
-        if (birth.getTime() > now.getTime()) {
-          return {
-            invalid: true,
-            message: "La fecha de nacimiento no puede ser en el futuro.",
-          };
+      // Show mood modal once per day (only if logged + birthdate set)
+      useEffect(() => {
+        if (!currentUser || !birthdate) return;
+        const today = isoToday();
+        const moods = currentUser.moods || {};
+        if (!moods[today]) {
+          setTodayMood(null);
+          setShowMoodModal(true);
         }
+      }, [session?.username, birthdate]);
 
-        const msInDay = 1000 * 60 * 60 * 24;
-        const msInWeek = msInDay * 7;
-
-        const diffMs = now.getTime() - birth.getTime();
-        const daysLived = Math.floor(diffMs / msInDay);
-
-        // 80 años * 52 semanas
-        const totalWeeks = 4160;
-
-        let weeksLived = Math.floor(diffMs / msInWeek);
-        weeksLived = Math.max(0, weeksLived);
-
-        // Si alguien supera 80 años, clamp para visualización/progreso
-        const weeksLivedClamped = clamp(weeksLived, 0, totalWeeks);
-        const weeksRemaining = Math.max(0, totalWeeks - weeksLivedClamped);
-
-        const percentageLived = clamp(Math.round((weeksLivedClamped / totalWeeks) * 100), 0, 100);
-
-        // Aproximación simple, consistente
-        const yearsLived = Math.floor(daysLived / 365.2425);
-        const monthsLived = Math.floor((daysLived % 365.2425) / 30.436875);
-
-        return {
-          invalid: false,
-          weeksLived,
-          weeksLivedClamped,
-          totalWeeks,
-          weeksRemaining,
-          percentageLived,
-          daysLived,
-          yearsLived,
-          monthsLived,
-        };
+      // Helpers to update current user record
+      function updateCurrentUser(patch) {
+        if (!session?.username) return;
+        setUsers(prev => {
+          const copy = { ...prev };
+          const base = copy[session.username] || {};
+          copy[session.username] = { ...base, ...patch };
+          return copy;
+        });
       }
 
-      function handleSaveBirthdate() {
+      function updatePrefs(patch) {
+        updateCurrentUser({ prefs: { ...(currentUser?.prefs || {}), ...patch } });
+      }
+
+      // Theme/design/lang changes => persist in user if logged, else keep in UI only
+      function handleLang(newLang) {
+        setLang(newLang);
+        if (currentUser) updatePrefs({ lang: newLang });
+      }
+      function handleTheme(newTheme) {
+        setTheme(newTheme);
+        if (currentUser) updatePrefs({ theme: newTheme });
+      }
+      function handleDesign(newDesign) {
+        setDesign(newDesign);
+        if (currentUser) updatePrefs({ design: newDesign });
+      }
+
+      function saveBirthdate() {
         setError("");
         if (!tempBirthdate) return;
-
-        const s = calculateStats(tempBirthdate);
+        const s = computeStats(tempBirthdate);
         if (!s || s.invalid) {
-          setError(s?.message || "Fecha inválida.");
+          setError(t(s?.messageKey || "error"));
           return;
         }
 
         setBirthdate(tempBirthdate);
         setStats(s);
-        safeSet(STORAGE.birthdate, tempBirthdate);
+        if (currentUser) updateCurrentUser({ birthdate: tempBirthdate });
       }
 
-      function handleReset() {
+      function resetBirthdate() {
         setBirthdate("");
         setTempBirthdate("");
         setStats(null);
-        setShowSettings(false);
         setError("");
-        safeRemove(STORAGE.birthdate);
+        if (currentUser) updateCurrentUser({ birthdate: "" });
       }
 
-      function handleThemeChange(newTheme) {
-        if (!THEMES[newTheme]) return;
-        setTheme(newTheme);
-        safeSet(STORAGE.theme, newTheme);
+      // ============ AUTH ============
+      async function register() {
+        setAuthMsg("");
+        const u = authUser.trim();
+        const p = authPass;
+        if (!u || !p) return;
+
+        if (users[u]) { setAuthMsg(t("userExists")); return; }
+
+        const passHash = await sha256Hex("wol:" + u + ":" + p);
+        const newUser = {
+          version: 1,
+          username: u,
+          passHash,
+          createdAt: Date.now(),
+          birthdate: "",
+          prefs: { lang: "es", theme: "minimal", design: "grid" },
+          moods: {},     // { "YYYY-MM-DD": moodId }
+          context: { ...defaultContext },
+        };
+
+        setUsers(prev => ({ ...prev, [u]: newUser }));
+        setSession({ username: u });
+        setAuthUser("");
+        setAuthPass("");
+        setAuthMsg("");
       }
 
-      function handleDesignChange(newDesign) {
-        setDesign(newDesign);
-        safeSet(STORAGE.design, newDesign);
+      async function login() {
+        setAuthMsg("");
+        const u = authUser.trim();
+        const p = authPass;
+        if (!u || !p) return;
+
+        const rec = users[u];
+        if (!rec) { setAuthMsg(t("wrongLogin")); return; }
+
+        const passHash = await sha256Hex("wol:" + u + ":" + p);
+        if (passHash !== rec.passHash) { setAuthMsg(t("wrongLogin")); return; }
+
+        setSession({ username: u });
+        setAuthUser("");
+        setAuthPass("");
+        setAuthMsg("");
       }
 
-      // ====== Render de diseños (1 semana = 1 elemento en TODOS) ======
-      function weekColorFor(index) {
-        // index: 0..totalWeeks-1
-        const wl = stats.weeksLivedClamped;
-        if (index < wl) return themeColors.hex.weekPast;
-        if (index === wl) return themeColors.hex.weekCurrent;
+      function logout() {
+        setSession(null);
+        setAuthMsg("");
+        setImportMsg("");
+        setExportCode("");
+        setBirthdate("");
+        setStats(null);
+      }
+
+      // ============ EXPORT / IMPORT ============
+      function doExport() {
+        setImportMsg("");
+        if (!currentUser) return;
+        const payload = {
+          app: "weeks-of-life",
+          version: 1,
+          exportedAt: Date.now(),
+          user: currentUser,
+        };
+        setExportCode(btoa(unescape(encodeURIComponent(JSON.stringify(payload)))));
+      }
+
+      function doImport() {
+        setImportMsg("");
+        try {
+          const decoded = decodeURIComponent(escape(atob(importCode.trim())));
+          const payload = JSON.parse(decoded);
+          if (!payload || payload.app !== "weeks-of-life" || !payload.user?.username) throw new Error("bad");
+
+          const u = payload.user.username;
+          setUsers(prev => ({ ...prev, [u]: payload.user }));
+          setImportMsg(t("importOk"));
+          setImportCode("");
+        } catch {
+          setImportMsg(t("error"));
+        }
+      }
+
+      // ============ MOODS ============
+      function saveMood(moodId) {
+        if (!currentUser) return;
+        const today = isoToday();
+        const newMoods = { ...(currentUser.moods || {}), [today]: moodId };
+        updateCurrentUser({ moods: newMoods });
+        setShowMoodModal(false);
+      }
+
+      function skipMood() { setShowMoodModal(false); }
+
+      function moodHistory(lastDays = 90) {
+        const out = [];
+        const moods = currentUser?.moods || {};
+        const now = new Date();
+        for (let i = lastDays - 1; i >= 0; i--) {
+          const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+          const y = d.getFullYear();
+          const m = String(d.getMonth() + 1).padStart(2, "0");
+          const day = String(d.getDate()).padStart(2, "0");
+          const iso = `${y}-${m}-${day}`;
+          const id = moods[iso] || null;
+          out.push({ iso, id });
+        }
+        return out;
+      }
+
+      // ============ CONTEXT SETTINGS ============
+      function saveContext() {
+        if (!currentUser) return;
+        updateCurrentUser({ context: { ...context } });
+      }
+
+      // ============ DESIGN RENDER ============
+      function weekColorFor(i) {
+        const wl = stats?.weeksLivedClamped ?? 0;
+        if (i < wl) return themeColors.hex.weekPast;
+        if (i === wl) return themeColors.hex.weekCurrent;
         return themeColors.hex.weekFuture;
       }
 
-      function renderGridDesign() {
+      function renderGrid() {
         if (!stats || stats.invalid) return null;
-
         const weeksPerRow = 52;
-        const rows = 80; // 4160/52
         const cells = [];
-
         for (let i = 0; i < stats.totalWeeks; i++) {
           const isCurrent = i === stats.weeksLivedClamped;
           cells.push(
@@ -354,274 +773,425 @@
               key={i}
               className={"w-2 h-2 rounded-sm " + (isCurrent ? "animate-pulse" : "")}
               style={{ backgroundColor: weekColorFor(i) }}
-              title={`Semana ${i + 1}`}
+              title={`Week ${i + 1}`}
             />
           );
         }
-
         return (
           <div className="w-full">
-            <div
-              className="grid gap-[2px] justify-center"
-              style={{ gridTemplateColumns: `repeat(${weeksPerRow}, minmax(0, 0.5rem))` }}
-            >
+            <div className="grid gap-[2px] justify-center" style={{ gridTemplateColumns: `repeat(${weeksPerRow}, minmax(0, 0.5rem))` }}>
               {cells}
-            </div>
-            <div className={"mt-3 text-xs text-center " + themeColors.textSecondary}>
-              80 filas (años) × 52 columnas (semanas)
             </div>
           </div>
         );
       }
 
-      function renderCircleDesign() {
+      function renderCircle() {
         if (!stats || stats.invalid) return null;
-
-        // Círculo por anillos: 80 anillos (años), 52 puntos por anillo (semanas)
         const W = 340, H = 340;
-        const cx = W / 2, cy = H / 2;
-        const rings = 80;
-        const perRing = 52;
-
-        const maxR = 150;
-        const minR = 35;
+        const cx = W/2, cy = H/2;
+        const rings = 80, perRing = 52;
+        const maxR = 150, minR = 35;
         const step = (maxR - minR) / (rings - 1);
-
         const dots = [];
+
         for (let year = 0; year < rings; year++) {
           const r = minR + step * year;
           for (let w = 0; w < perRing; w++) {
             const idx = year * perRing + w;
-            const ang = (w / perRing) * Math.PI * 2 - Math.PI / 2;
+            const ang = (w / perRing) * Math.PI * 2 - Math.PI/2;
             const x = cx + r * Math.cos(ang);
             const y = cy + r * Math.sin(ang);
-
             const isCurrent = idx === stats.weeksLivedClamped;
-            dots.push(
-              <circle
-                key={idx}
-                cx={x}
-                cy={y}
-                r={isCurrent ? 2.2 : 1.3}
-                fill={weekColorFor(idx)}
-                opacity={isCurrent ? 1 : 0.95}
-              />
-            );
+            dots.push(<circle key={idx} cx={x} cy={y} r={isCurrent ? 2.2 : 1.3} fill={weekColorFor(idx)} />);
           }
         }
 
         return (
-          <div className="w-full">
-            <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="mx-auto block">
-              {dots}
-              <text
-                x={cx}
-                y={cy - 4}
-                textAnchor="middle"
-                fontSize="32"
-                fontWeight="800"
-                fill={themeColors.hex.text}
-              >
-                {stats.percentageLived}%
-              </text>
-              <text
-                x={cx}
-                y={cy + 18}
-                textAnchor="middle"
-                fontSize="12"
-                fill={themeColors.hex.textSecondary}
-              >
-                vivido
-              </text>
-            </svg>
-            <div className={"mt-2 text-xs text-center " + themeColors.textSecondary}>
-              Anillos por año (52 semanas por anillo)
-            </div>
-          </div>
+          <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="mx-auto block">
+            {dots}
+            <text x={cx} y={cy - 4} textAnchor="middle" fontSize="32" fontWeight="800" fill={themeColors.hex.text}>
+              {stats.percentageLived}%
+            </text>
+            <text x={cx} y={cy + 18} textAnchor="middle" fontSize="12" fill={themeColors.hex.textSecondary}>
+              {t("lived")}
+            </text>
+          </svg>
         );
       }
 
-      function renderWaveDesign() {
+      function renderWave() {
         if (!stats || stats.invalid) return null;
-
-        // Sigue siendo 80x52, pero “olas” con altura variable por columna
         const weeksPerRow = 52;
         const bars = [];
-
         for (let i = 0; i < stats.totalWeeks; i++) {
           const col = i % weeksPerRow;
-          const base = 6;
-          const amp = 10;
+          const base = 6, amp = 10;
           const h = base + Math.round((Math.sin(col * 0.35) + 1) * 0.5 * amp);
-
           const isCurrent = i === stats.weeksLivedClamped;
           bars.push(
             <div
               key={i}
               className={"w-[6px] rounded-t " + (isCurrent ? "animate-pulse" : "")}
               style={{ height: `${h}px`, backgroundColor: weekColorFor(i) }}
-              title={`Semana ${i + 1}`}
             />
           );
         }
-
         return (
           <div className="w-full">
-            <div
-              className="grid gap-[2px] justify-center items-end"
-              style={{ gridTemplateColumns: `repeat(${weeksPerRow}, minmax(0, 6px))` }}
-            >
+            <div className="grid gap-[2px] justify-center items-end" style={{ gridTemplateColumns: `repeat(${weeksPerRow}, minmax(0, 6px))` }}>
               {bars}
-            </div>
-            <div className={"mt-3 text-xs text-center " + themeColors.textSecondary}>
-              Olas (cada barra sigue siendo 1 semana)
             </div>
           </div>
         );
       }
 
-      function renderSpiralDesign() {
+      function renderSpiral() {
         if (!stats || stats.invalid) return null;
-
         const W = 340, H = 340;
-        const cx = W / 2, cy = H / 2;
-
-        // 1 punto = 1 semana, espiral con varias vueltas
-        const turns = 14; // vueltas de la espiral
+        const cx = W/2, cy = H/2;
+        const turns = 14;
         const maxR = 150;
-
         const dots = [];
         for (let i = 0; i < stats.totalWeeks; i++) {
-          const t = i / (stats.totalWeeks - 1); // 0..1
-          const ang = t * Math.PI * 2 * turns - Math.PI / 2;
-          const r = 10 + t * (maxR - 10);
-
+          const tt = i / (stats.totalWeeks - 1);
+          const ang = tt * Math.PI * 2 * turns - Math.PI/2;
+          const r = 10 + tt * (maxR - 10);
           const x = cx + r * Math.cos(ang);
           const y = cy + r * Math.sin(ang);
-
           const isCurrent = i === stats.weeksLivedClamped;
-          dots.push(
-            <circle
-              key={i}
-              cx={x}
-              cy={y}
-              r={isCurrent ? 2.4 : 1.1}
-              fill={weekColorFor(i)}
-              opacity={isCurrent ? 1 : 0.95}
-            />
-          );
+          dots.push(<circle key={i} cx={x} cy={y} r={isCurrent ? 2.4 : 1.1} fill={weekColorFor(i)} />);
         }
-
         return (
-          <div className="w-full">
-            <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="mx-auto block">
-              {dots}
-            </svg>
-            <div className={"mt-2 text-xs text-center " + themeColors.textSecondary}>
-              Espiral (1 punto = 1 semana)
-            </div>
-          </div>
+          <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="mx-auto block">
+            {dots}
+          </svg>
         );
       }
 
       function renderDesign() {
         switch (design) {
-          case "grid": return renderGridDesign();
-          case "circle": return renderCircleDesign();
-          case "wave": return renderWaveDesign();
-          case "spiral": return renderSpiralDesign();
-          default: return renderGridDesign();
+          case "grid": return renderGrid();
+          case "circle": return renderCircle();
+          case "wave": return renderWave();
+          case "spiral": return renderSpiral();
+          default: return renderGrid();
         }
       }
 
-      // ====== UI ======
+      // ============ HIGHLIGHTS TEXT ============
+      function blocks() {
+        if (!stats || stats.invalid) return null;
+
+        const weeksText = formatInt(stats.weeksLivedClamped);
+        const pctText = `${stats.percentageLived}%`;
+        const daysText = formatInt(stats.daysLived);
+        const seasonsText = formatInt(stats.seasons);
+
+        const heartText = formatInt(stats.heartBeats);
+        const breathsText = formatInt(stats.breaths);
+        const sleepText = formatInt(stats.sleepHours);
+
+        const popStart = Number(context.populationAtBirth || 0);
+        const popNow = Number(context.populationNow || 0);
+        const birthsPerYear = Number(context.birthsPerYear || 0);
+        const deathsPerYear = Number(context.deathsPerYear || 0);
+
+        const years = stats.daysLived / 365.2425;
+        const births = years * birthsPerYear;
+        const deaths = years * deathsPerYear;
+
+        const meetTotal = 80000;
+        const metLikely = clamp(Math.round(meetTotal * (stats.percentageLived / 100)), 0, meetTotal);
+
+        const earthKm = formatInt(stats.earthAroundSunKm);
+        const solarKm = formatInt(stats.solarSystemKm);
+        const lunar = formatInt(stats.lunarCycles);
+        const sunTrips = formatInt(stats.tripsAroundSun);
+        const universePct = stats.lifespanPercentOfUniverse;
+
+        const sequoiaPct = ((stats.daysLived / 365.2425) / 3000) * 100;
+
+        const p0 = voice[0];
+        const p1 = voice[1];
+
+        const L = lang;
+
+        const highlightLines = (L === "es") ? [
+          `Has vivido ${weeksText} semanas, aproximadamente el ${pctText} de una vida base (80 años).`,
+          `Eso son ${daysText} días y unas ${seasonsText} estaciones.`,
+          `Tu corazón ha latido alrededor de ${heartText} veces.`,
+          `Has respirado cerca de ${breathsText} veces y dormido unas ${sleepText} horas.`,
+        ] : [
+          `You’ve lived ${weeksText} weeks, about ${pctText} of a baseline life (80 years).`,
+          `That’s ${daysText} days and roughly ${seasonsText} seasons.`,
+          `Your heart has beaten around ${heartText} times.`,
+          `You’ve taken about ${breathsText} breaths and slept roughly ${sleepText} hours.`,
+        ];
+
+        const societalLines = (L === "es") ? [
+          `Durante tu vida, la población mundial ha pasado de ~${formatInt(popStart)} a ~${formatInt(popNow)}.`,
+          `La media dice que una persona conoce ~${formatInt(meetTotal)} personas. Tú probablemente ~${formatInt(metLikely)}.`,
+          `Desde tu nacimiento, la humanidad ha vivido aproximadamente ${formatInt(births)} nacimientos y ${formatInt(deaths)} muertes (estimación).`,
+        ] : [
+          `During your lifetime, world population moved from ~${formatInt(popStart)} to ~${formatInt(popNow)}.`,
+          `On average, a person meets ~${formatInt(meetTotal)} people. You likely ~${formatInt(metLikely)}.`,
+          `Since your birth, humanity saw roughly ${formatInt(births)} births and ${formatInt(deaths)} deaths (estimate).`,
+        ];
+
+        const cosmicLines = (L === "es") ? [
+          `Desde que naciste, la Tierra ha recorrido ~${earthKm} km alrededor del Sol.`,
+          `En ese tiempo, el Sistema Solar ha avanzado ~${solarKm} km a través de la Vía Láctea (aprox.).`,
+          `Tu vida representa ~${universePct.toExponential(3)}% de la edad del universo (aprox.).`,
+        ] : [
+          `Since your birth, Earth traveled ~${earthKm} km around the Sun.`,
+          `In that time, the Solar System moved ~${solarKm} km through the Milky Way (approx.).`,
+          `Your life is ~${universePct.toExponential(3)}% of the universe’s age (approx.).`,
+        ];
+
+        const natureLines = (L === "es") ? [
+          `Has vivido ~${lunar} ciclos lunares y ~${sunTrips} vueltas al Sol.`,
+          `Una secuoya gigante puede vivir >3.000 años: tu edad es ~${sequoiaPct.toFixed(2)}% de eso.`,
+          `Tu cuerpo ha reemplazado gran parte de sus células varias veces: eres “nuevo” por dentro más de una vez.`,
+        ] : [
+          `You’ve lived ~${lunar} lunar cycles and ~${sunTrips} trips around the Sun.`,
+          `A giant sequoia can live >3,000 years: your age is ~${sequoiaPct.toFixed(2)}% of that.`,
+          `Your body has replaced most of its cells multiple times—you’ve been “renewed” more than once.`,
+        ];
+
+        return {
+          personalityTop: [p0, p1],
+          highlightLines,
+          societalLines,
+          cosmicLines,
+          natureLines,
+        };
+      }
+
+      const content = useMemo(() => blocks(), [stats, context, theme, design, lang]);
+
+      // =================== SETTINGS SCREEN ===================
       if (showSettings) {
         return (
           <div className={`min-h-screen safe-bottom ${themeColors.bg} ${themeColors.text} p-4`}>
             <div className="max-w-md mx-auto pt-8">
               <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold">Ajustes</h2>
-                <button
-                  onClick={() => setShowSettings(false)}
-                  className={themeColors.textSecondary}
-                  aria-label="Cerrar ajustes"
-                >
+                <h2 className="text-2xl font-bold">{t("settings")}</h2>
+                <button onClick={() => setShowSettings(false)} className={themeColors.textSecondary} aria-label={t("close")}>
                   <XIcon />
                 </button>
               </div>
 
+              {/* Language */}
               <div className={`${themeColors.card} p-4 rounded-lg mb-4 border ${themeColors.border}`}>
-                <h3 className="font-semibold mb-3">Tema</h3>
+                <h3 className="font-semibold mb-3">{t("language")}</h3>
                 <div className="grid grid-cols-2 gap-2">
                   <button
-                    onClick={() => handleThemeChange("minimal")}
-                    className={`p-3 rounded-lg border-2 ${theme === "minimal" ? "border-gray-900" : themeColors.border} flex items-center gap-2`}
+                    onClick={() => handleLang("es")}
+                    className={`p-3 rounded-lg border-2 ${lang === "es" ? "ring-2 ring-offset-2 ring-black/20" : ""} ${themeColors.border}`}
                   >
-                    <SunIcon /><span>Minimal</span>
+                    {t("spanish")}
                   </button>
                   <button
-                    onClick={() => handleThemeChange("dark")}
-                    className={`p-3 rounded-lg border-2 ${theme === "dark" ? "border-purple-500" : themeColors.border} flex items-center gap-2`}
+                    onClick={() => handleLang("en")}
+                    className={`p-3 rounded-lg border-2 ${lang === "en" ? "ring-2 ring-offset-2 ring-black/20" : ""} ${themeColors.border}`}
                   >
-                    <MoonIcon /><span>Oscuro</span>
-                  </button>
-                  <button
-                    onClick={() => handleThemeChange("warm")}
-                    className={`p-3 rounded-lg border-2 ${theme === "warm" ? "border-orange-600" : themeColors.border} flex items-center gap-2`}
-                  >
-                    <SparklesIcon /><span>Cálido</span>
-                  </button>
-                  <button
-                    onClick={() => handleThemeChange("ocean")}
-                    className={`p-3 rounded-lg border-2 ${theme === "ocean" ? "border-blue-600" : themeColors.border} flex items-center gap-2`}
-                  >
-                    <DropletsIcon /><span>Océano</span>
+                    {t("english")}
                   </button>
                 </div>
               </div>
 
+              {/* Profile */}
               <div className={`${themeColors.card} p-4 rounded-lg mb-4 border ${themeColors.border}`}>
-                <h3 className="font-semibold mb-3">Diseño</h3>
+                <h3 className="font-semibold mb-3">{t("profile")}</h3>
+
+                {currentUser ? (
+                  <div className="space-y-3">
+                    <div className={`${themeColors.textSecondary} text-sm`}>
+                      {t("loggedAs")} <span className="font-semibold">{currentUser.username}</span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <button onClick={doExport} className={`p-3 rounded-lg ${themeColors.accent} ${themeColors.accentHover} text-white font-medium`}>
+                        {t("export")}
+                      </button>
+                      <button onClick={logout} className="p-3 rounded-lg bg-red-500 hover:bg-red-600 text-white font-medium">
+                        {t("logout")}
+                      </button>
+                    </div>
+
+                    {exportCode && (
+                      <div className="mt-2">
+                        <div className={`${themeColors.textSecondary} text-xs mb-2`}>{t("exportHint")}</div>
+                        <textarea className={`w-full p-3 rounded-lg border ${themeColors.border} bg-transparent text-xs`} rows="4"
+                          value={exportCode} readOnly onFocus={(e) => e.target.select()}
+                        />
+                      </div>
+                    )}
+
+                    <div className="mt-3">
+                      <div className={`${themeColors.textSecondary} text-xs mb-2`}>{t("importHint")}</div>
+                      <textarea className={`w-full p-3 rounded-lg border ${themeColors.border} bg-transparent text-xs`} rows="4"
+                        value={importCode} onChange={(e) => setImportCode(e.target.value)}
+                      />
+                      <button onClick={doImport} className={`mt-2 w-full p-3 rounded-lg border ${themeColors.border} font-medium`}>
+                        {t("import")}
+                      </button>
+                      {importMsg && <div className="mt-2 text-sm">{importMsg}</div>}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className={`${themeColors.textSecondary} text-sm`}>{t("needUser")}</div>
+
+                    <input
+                      className={`w-full p-3 rounded-lg border ${themeColors.border} bg-transparent`}
+                      placeholder={t("username")}
+                      value={authUser}
+                      onChange={(e) => setAuthUser(e.target.value)}
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                    />
+                    <input
+                      className={`w-full p-3 rounded-lg border ${themeColors.border} bg-transparent`}
+                      placeholder={t("password")}
+                      type="password"
+                      value={authPass}
+                      onChange={(e) => setAuthPass(e.target.value)}
+                    />
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <button onClick={register} className={`p-3 rounded-lg ${themeColors.accent} ${themeColors.accentHover} text-white font-medium`}>
+                        {t("register")}
+                      </button>
+                      <button onClick={login} className={`p-3 rounded-lg border ${themeColors.border} font-medium`}>
+                        {t("login")}
+                      </button>
+                    </div>
+
+                    {authMsg && <div className="text-sm text-red-600">{authMsg}</div>}
+
+                    <div className="mt-2">
+                      <div className={`${themeColors.textSecondary} text-xs mb-2`}>{t("importHint")}</div>
+                      <textarea className={`w-full p-3 rounded-lg border ${themeColors.border} bg-transparent text-xs`} rows="4"
+                        value={importCode} onChange={(e) => setImportCode(e.target.value)}
+                      />
+                      <button onClick={doImport} className={`mt-2 w-full p-3 rounded-lg border ${themeColors.border} font-medium`}>
+                        {t("import")}
+                      </button>
+                      {importMsg && <div className="mt-2 text-sm">{importMsg}</div>}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Theme */}
+              <div className={`${themeColors.card} p-4 rounded-lg mb-4 border ${themeColors.border}`}>
+                <h3 className="font-semibold mb-3">{t("theme")}</h3>
                 <div className="grid grid-cols-2 gap-2">
-                  <button
-                    onClick={() => handleDesignChange("grid")}
-                    className={`p-3 rounded-lg border-2 ${design === "grid" ? "ring-2 ring-offset-2 ring-black/20" : ""} ${themeColors.border}`}
-                  >
-                    Cuadrícula
-                  </button>
-                  <button
-                    onClick={() => handleDesignChange("circle")}
-                    className={`p-3 rounded-lg border-2 ${design === "circle" ? "ring-2 ring-offset-2 ring-black/20" : ""} ${themeColors.border}`}
-                  >
-                    Círculo
-                  </button>
-                  <button
-                    onClick={() => handleDesignChange("wave")}
-                    className={`p-3 rounded-lg border-2 ${design === "wave" ? "ring-2 ring-offset-2 ring-black/20" : ""} ${themeColors.border}`}
-                  >
-                    Ondas
-                  </button>
-                  <button
-                    onClick={() => handleDesignChange("spiral")}
-                    className={`p-3 rounded-lg border-2 ${design === "spiral" ? "ring-2 ring-offset-2 ring-black/20" : ""} ${themeColors.border}`}
-                  >
-                    Espiral
-                  </button>
+                  {Object.keys(THEMES).map(k => (
+                    <button
+                      key={k}
+                      onClick={() => handleTheme(k)}
+                      className={`p-3 rounded-lg border-2 ${theme === k ? "ring-2 ring-offset-2 ring-black/20" : ""} ${themeColors.border} flex items-center gap-2`}
+                    >
+                      {k === "minimal" && <SunIcon />}
+                      {k === "dark" && <MoonIcon />}
+                      {k === "warm" && <SparklesIcon />}
+                      {k === "ocean" && <DropletsIcon />}
+                      <span>{THEMES[k].label[lang] || THEMES[k].label.en}</span>
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              {birthdate && (
+              {/* Design */}
+              <div className={`${themeColors.card} p-4 rounded-lg mb-4 border ${themeColors.border}`}>
+                <h3 className="font-semibold mb-3">{t("design")}</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  {["grid", "circle", "wave", "spiral"].map(d => (
+                    <button
+                      key={d}
+                      onClick={() => handleDesign(d)}
+                      className={`p-3 rounded-lg border-2 ${design === d ? "ring-2 ring-offset-2 ring-black/20" : ""} ${themeColors.border}`}
+                    >
+                      {t(d)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Birthdate */}
+              {currentUser && (
                 <div className={`${themeColors.card} p-4 rounded-lg mb-4 border ${themeColors.border}`}>
-                  <h3 className="font-semibold mb-3">Fecha de nacimiento</h3>
-                  <p className={themeColors.textSecondary + " text-sm mb-3"}>
-                    Guardada: {parseISODateToLocalMidnight(birthdate)?.toLocaleDateString("es-ES")}
-                  </p>
+                  <h3 className="font-semibold mb-3">{t("whenBorn")}</h3>
+                  {birthdate ? (
+                    <div className={`${themeColors.textSecondary} text-sm mb-3`}>
+                      {t("birthSaved")}: {parseISODateToLocalMidnight(birthdate)?.toLocaleDateString(lang === "es" ? "es-ES" : "en-US")}
+                    </div>
+                  ) : (
+                    <div className={`${themeColors.textSecondary} text-sm mb-3`}>
+                      {lang === "es" ? "Aún no guardada." : "Not set yet."}
+                    </div>
+                  )}
+
+                  <input
+                    type="date"
+                    className={`w-full p-3 rounded-lg mb-3 border ${themeColors.border} bg-transparent`}
+                    value={tempBirthdate}
+                    onChange={(e) => setTempBirthdate(e.target.value)}
+                  />
+                  {error && <div className="text-sm text-red-600 mb-2">{error}</div>}
                   <button
-                    onClick={handleReset}
-                    className="w-full bg-red-500 hover:bg-red-600 text-white py-2 rounded-lg"
+                    onClick={saveBirthdate}
+                    disabled={!tempBirthdate}
+                    className={`w-full ${themeColors.accent} ${themeColors.accentHover} text-white py-3 rounded-lg font-medium disabled:opacity-50`}
                   >
-                    Restablecer fecha
+                    {t("save")}
                   </button>
+
+                  {birthdate && (
+                    <button onClick={resetBirthdate} className="mt-2 w-full bg-red-500 hover:bg-red-600 text-white py-2 rounded-lg">
+                      {t("resetBirth")}
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Context settings */}
+              {currentUser && (
+                <div className={`${themeColors.card} p-4 rounded-lg mb-4 border ${themeColors.border}`}>
+                  <h3 className="font-semibold mb-3">{t("contextSettings")}</h3>
+                  <div className="space-y-2">
+                    <label className="text-sm">{t("populationAtBirth")}</label>
+                    <input className={`w-full p-3 rounded-lg border ${themeColors.border} bg-transparent`}
+                      inputMode="numeric"
+                      value={context.populationAtBirth}
+                      onChange={(e) => setContext(c => ({ ...c, populationAtBirth: e.target.value }))}
+                    />
+                    <label className="text-sm">{t("populationNow")}</label>
+                    <input className={`w-full p-3 rounded-lg border ${themeColors.border} bg-transparent`}
+                      inputMode="numeric"
+                      value={context.populationNow}
+                      onChange={(e) => setContext(c => ({ ...c, populationNow: e.target.value }))}
+                    />
+                    <label className="text-sm">{t("birthsPerYear")}</label>
+                    <input className={`w-full p-3 rounded-lg border ${themeColors.border} bg-transparent`}
+                      inputMode="numeric"
+                      value={context.birthsPerYear}
+                      onChange={(e) => setContext(c => ({ ...c, birthsPerYear: e.target.value }))}
+                    />
+                    <label className="text-sm">{t("deathsPerYear")}</label>
+                    <input className={`w-full p-3 rounded-lg border ${themeColors.border} bg-transparent`}
+                      inputMode="numeric"
+                      value={context.deathsPerYear}
+                      onChange={(e) => setContext(c => ({ ...c, deathsPerYear: e.target.value }))}
+                    />
+                    <button onClick={saveContext} className={`mt-2 w-full ${themeColors.accent} ${themeColors.accentHover} text-white py-2 rounded-lg font-medium`}>
+                      {t("save")}
+                    </button>
+                    <div className={`${themeColors.textSecondary} text-xs mt-2`}>{t("estimates")}</div>
+                  </div>
                 </div>
               )}
             </div>
@@ -629,36 +1199,63 @@
         );
       }
 
+      // =================== MAIN FLOW ===================
+      if (!currentUser) {
+        // Landing (no login)
+        return (
+          <div className={`min-h-screen safe-bottom ${themeColors.bg} ${themeColors.text} flex items-center justify-center p-4`}>
+            <div className="max-w-md w-full">
+              <h1 className="text-3xl font-bold mb-2 text-center">{t("appTitle")}</h1>
+              <p className={`${themeColors.textSecondary} text-center mb-8`}>{t("appSubtitle")}</p>
+
+              <div className={`${themeColors.card} p-6 rounded-2xl border ${themeColors.border}`}>
+                <div className={`${themeColors.textSecondary} text-sm mb-4`}>
+                  {t("needUser")}
+                </div>
+
+                <button onClick={() => setShowSettings(true)} className={`w-full ${themeColors.accent} ${themeColors.accentHover} text-white py-3 rounded-lg font-medium`}>
+                  {t("settings")}
+                </button>
+
+                <div className={`${themeColors.textSecondary} text-xs mt-4`}>
+                  {t("assumptions")}: {t("assumptionsBody")}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      // If logged but no birthdate
       if (!birthdate) {
         return (
           <div className={`min-h-screen safe-bottom ${themeColors.bg} ${themeColors.text} flex items-center justify-center p-4`}>
             <div className="max-w-md w-full">
-              <h1 className="text-3xl font-bold mb-2 text-center">Tu vida en semanas</h1>
-              <p className={`${themeColors.textSecondary} text-center mb-8`}>
-                Visualiza el tiempo que has vivido (80 años = 4160 semanas)
-              </p>
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                  <h1 className="text-2xl font-bold">{t("appTitle")}</h1>
+                  <p className={`${themeColors.textSecondary} text-sm`}>{t("loggedAs")} <b>{currentUser.username}</b></p>
+                </div>
+                <button onClick={() => setShowSettings(true)} className={themeColors.textSecondary} aria-label={t("settings")}>
+                  <SettingsIcon />
+                </button>
+              </div>
 
               <div className={`${themeColors.card} p-6 rounded-2xl border ${themeColors.border}`}>
-                <label className="block mb-2 font-medium">¿Cuándo naciste?</label>
+                <label className="block mb-2 font-medium">{t("whenBorn")}</label>
                 <input
                   type="date"
-                  className={`w-full p-3 rounded-lg mb-3 border-2 ${themeColors.border} bg-transparent`}
+                  className={`w-full p-3 rounded-lg mb-3 border ${themeColors.border} bg-transparent`}
                   value={tempBirthdate}
                   onChange={(e) => setTempBirthdate(e.target.value)}
                 />
-
-                {error && (
-                  <div className="mb-3 text-sm text-red-600">
-                    {error}
-                  </div>
-                )}
-
+                {error && <div className="text-sm text-red-600 mb-2">{error}</div>}
                 <button
-                  onClick={handleSaveBirthdate}
+                  onClick={saveBirthdate}
                   disabled={!tempBirthdate}
                   className={`w-full ${themeColors.accent} ${themeColors.accentHover} text-white py-3 rounded-lg font-medium disabled:opacity-50`}
                 >
-                  Comenzar
+                  {t("start")}
                 </button>
               </div>
             </div>
@@ -671,75 +1268,174 @@
         return (
           <div className={`min-h-screen safe-bottom ${themeColors.bg} ${themeColors.text} flex items-center justify-center p-4`}>
             <div className={`${themeColors.card} border ${themeColors.border} p-6 rounded-2xl max-w-md w-full`}>
-              <div className="text-lg font-bold mb-2">Error</div>
-              <div className={themeColors.textSecondary + " mb-4"}>{stats.message}</div>
-              <button className="w-full bg-red-500 hover:bg-red-600 text-white py-2 rounded-lg" onClick={handleReset}>
-                Restablecer
+              <div className="text-lg font-bold mb-2">{t("error")}</div>
+              <div className={themeColors.textSecondary + " mb-4"}>{t(stats.messageKey)}</div>
+              <button className="w-full bg-red-500 hover:bg-red-600 text-white py-2 rounded-lg" onClick={resetBirthdate}>
+                {t("resetBirth")}
               </button>
             </div>
           </div>
         );
       }
 
+      const moodCells = moodHistory(90);
+
       return (
         <div className={`min-h-screen safe-bottom ${themeColors.bg} ${themeColors.text}`}>
+          {/* Mood modal */}
+          {showMoodModal && (
+            <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-3">
+              <div className={`${themeColors.card} w-full max-w-md rounded-2xl p-4 border ${themeColors.border}`}>
+                <div className="flex justify-between items-start">
+                  <div>
+                    <div className="text-lg font-bold">{t("todayMoodTitle")}</div>
+                    <div className={`${themeColors.textSecondary} text-sm`}>{t("todayMoodSubtitle")}</div>
+                  </div>
+                  <button onClick={skipMood} className={themeColors.textSecondary} aria-label={t("close")}><XIcon /></button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 mt-4">
+                  {MOODS.map(m => (
+                    <button
+                      key={m.id}
+                      onClick={() => saveMood(m.id)}
+                      className={`p-3 rounded-lg border ${themeColors.border} flex items-center gap-2`}
+                    >
+                      <span className="inline-block w-3 h-3 rounded-sm" style={{ backgroundColor: m.color }}></span>
+                      <span>{m.label[lang] || m.label.en}</span>
+                    </button>
+                  ))}
+                </div>
+
+                <button onClick={skipMood} className={`mt-3 w-full p-3 rounded-lg border ${themeColors.border}`}>
+                  {t("skip")}
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="max-w-md mx-auto p-4 pt-8">
             <div className="flex justify-between items-center mb-6">
               <div>
-                <h1 className="text-2xl font-bold">Tu vida</h1>
+                <h1 className="text-2xl font-bold">{t("yourLife")}</h1>
                 <p className={themeColors.textSecondary + " text-sm"}>
-                  {stats.yearsLived} años, {stats.monthsLived} meses
+                  {stats.yearsLived} {lang === "es" ? "años" : "years"}, {stats.monthsLived} {lang === "es" ? "meses" : "months"}
                 </p>
               </div>
-              <button
-                onClick={() => setShowSettings(true)}
-                className={themeColors.textSecondary}
-                aria-label="Abrir ajustes"
-              >
+              <button onClick={() => setShowSettings(true)} className={themeColors.textSecondary} aria-label={t("settings")}>
                 <SettingsIcon />
               </button>
             </div>
 
+            {/* Personality header */}
+            <div className={`${themeColors.card} p-4 rounded-2xl mb-4 border ${themeColors.border}`}>
+              <div className="text-sm font-semibold">{content?.personalityTop?.[0]}</div>
+              <div className={`${themeColors.textSecondary} text-sm mt-1`}>{content?.personalityTop?.[1]}</div>
+            </div>
+
+            {/* Main design */}
             <div className={`${themeColors.card} p-5 rounded-2xl mb-4 border ${themeColors.border}`}>
               {renderDesign()}
             </div>
 
+            {/* Quick stats */}
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div className={`${themeColors.card} p-4 rounded-xl border ${themeColors.border}`}>
-                <p className={themeColors.textSecondary + " text-sm mb-1"}>Semanas vividas</p>
+                <p className={themeColors.textSecondary + " text-sm mb-1"}>{t("weeksLived")}</p>
                 <p className="text-2xl font-bold">{stats.weeksLived.toLocaleString()}</p>
               </div>
               <div className={`${themeColors.card} p-4 rounded-xl border ${themeColors.border}`}>
-                <p className={themeColors.textSecondary + " text-sm mb-1"}>Días vividos</p>
+                <p className={themeColors.textSecondary + " text-sm mb-1"}>{t("daysLived")}</p>
                 <p className="text-2xl font-bold">{stats.daysLived.toLocaleString()}</p>
               </div>
             </div>
 
-            <div className={`${themeColors.card} p-6 rounded-2xl border ${themeColors.border}`}>
+            {/* Progress */}
+            <div className={`${themeColors.card} p-6 rounded-2xl border ${themeColors.border} mb-4`}>
               <div className="flex justify-between items-center mb-2">
-                <span className={themeColors.textSecondary}>Progreso de vida</span>
+                <span className={themeColors.textSecondary}>{t("lifeProgress")}</span>
                 <span className="text-2xl font-bold">{stats.percentageLived}%</span>
               </div>
 
               <div className={`w-full rounded-full h-3 overflow-hidden ${themeColors.track}`}>
-                <div
-                  className={themeColors.accent + " h-full rounded-full transition-all duration-700"}
-                  style={{ width: `${stats.percentageLived}%` }}
-                />
+                <div className={themeColors.accent + " h-full rounded-full transition-all duration-700"} style={{ width: `${stats.percentageLived}%` }} />
               </div>
 
               <p className={themeColors.textSecondary + " text-sm mt-3"}>
-                Te quedan aproximadamente {stats.weeksRemaining.toLocaleString()} semanas (sobre 80 años)
+                {t("weeksLeft")} {stats.weeksRemaining.toLocaleString()} {t("weeks")}
               </p>
+
+              <p className={themeColors.textSecondary + " text-xs mt-2"}>
+                {t("assumptions")}: {t("assumptionsBody")}
+              </p>
+            </div>
+
+            {/* Mood tracker */}
+            <div className={`${themeColors.card} p-6 rounded-2xl border ${themeColors.border} mb-4`}>
+              <div className="flex justify-between items-center mb-2">
+                <span className="font-semibold">{t("moodTracker")}</span>
+                <span className={themeColors.textSecondary + " text-xs"}>{t("moodLegend")}</span>
+              </div>
+
+              <div className="grid grid-cols-15 gap-[3px]" style={{ gridTemplateColumns: "repeat(15, minmax(0, 1fr))" }}>
+                {moodCells.map((d) => {
+                  const mood = moodById(d.id);
+                  const col = mood ? mood.color : (theme === "dark" ? "#111827" : "#e5e7eb");
+                  return (
+                    <div
+                      key={d.iso}
+                      className="w-full aspect-square rounded-[3px]"
+                      style={{ backgroundColor: col }}
+                      title={`${d.iso}${mood ? " · " + (mood.label[lang] || mood.label.en) : ""}`}
+                    />
+                  );
+                })}
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 mt-4">
+                {MOODS.slice(0, 6).map(m => (
+                  <div key={m.id} className="flex items-center gap-2 text-xs">
+                    <span className="inline-block w-3 h-3 rounded-sm" style={{ backgroundColor: m.color }}></span>
+                    <span className={themeColors.textSecondary}>{m.label[lang] || m.label.en}</span>
+                  </div>
+                ))}
+              </div>
+
+              <button
+                onClick={() => { setShowMoodModal(true); }}
+                className={`mt-4 w-full p-3 rounded-lg border ${themeColors.border} font-medium`}
+              >
+                {lang === "es" ? "Registrar ánimo ahora" : "Log mood now"}
+              </button>
+            </div>
+
+            {/* Text blocks */}
+            <InfoCard title={t("highlights")} themeColors={themeColors} lines={content?.highlightLines || []} />
+            <InfoCard title={t("societal")} themeColors={themeColors} lines={content?.societalLines || []} />
+            <InfoCard title={t("cosmic")} themeColors={themeColors} lines={content?.cosmicLines || []} />
+            <InfoCard title={t("nature")} themeColors={themeColors} lines={content?.natureLines || []} />
+
+            <div className={`${themeColors.textSecondary} text-xs mt-6 text-center`}>
+              {currentUser.username} · {design} · {theme}
             </div>
           </div>
         </div>
       );
     }
 
-    // React 18: createRoot
+    function InfoCard({ title, themeColors, lines }) {
+      return (
+        <div className={`${themeColors.card} p-6 rounded-2xl border ${themeColors.border} mb-4`}>
+          <div className="font-semibold mb-2">{title}</div>
+          <ul className={`space-y-2 ${themeColors.textSecondary}`}>
+            {lines.map((l, i) => <li key={i} className="text-sm leading-relaxed">• {l}</li>)}
+          </ul>
+        </div>
+      );
+    }
+
     const root = ReactDOM.createRoot(document.getElementById("root"));
-    root.render(<WeeksOfLife />);
+    root.render(<App />);
   </script>
 </body>
 </html>
