@@ -2,8 +2,9 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta name="theme-color" content="#ffffff" />
+  <meta name="description" content="Visualiza tu vida en semanas. Una perspectiva estoica y visual del tiempo.">
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <title>Tu Vida en Semanas</title>
@@ -12,465 +13,868 @@
   <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
 
   <style>
-    * { -webkit-tap-highlight-color: transparent; }
-    button, summary { -webkit-user-select: none; user-select: none; cursor: pointer; }
-    /* Fix crítico para móviles: evita zoom al escribir */
-    input, textarea, select { -webkit-user-select: text; user-select: text; font-size: 16px !important; }
+    /* Reset y Base */
+    * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+    html, body { height: 100%; font-family: 'Inter', sans-serif; }
+    body { margin: 0; overflow-x: hidden; min-height: 100dvh; background-color: #f9fafb; transition: background-color 0.5s ease; }
+    #root { min-height: 100dvh; display: flex; flex-direction: column; }
 
-    html, body { height: 100%; }
-    body { margin: 0; overflow-x: hidden; min-height: 100dvh; background: white; transition: background-color 0.5s ease; }
-    #root { min-height: 100dvh; }
-
-    .safe-bottom { padding-bottom: calc(1rem + env(safe-area-inset-bottom)); }
-    .safe-top { padding-top: calc(0.5rem + env(safe-area-inset-top)); }
-    .glass { backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
-
-    .fade-in { animation: fadeIn .4s cubic-bezier(0.2, 0.8, 0.2, 1); }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px);} to { opacity:1; transform: translateY(0);} }
-    
-    summary::-webkit-details-marker { display: none; }
-
-    /* Animaciones Atmosféricas */
-    @keyframes floaty { 0%,100% { transform: translateY(0);} 50% { transform: translateY(-10px);} }
-    @keyframes breathe { 0%,100% { transform: scale(1); opacity: 0.8; } 50% { transform: scale(1.05); opacity: 1; } }
-    @keyframes rotateSlow { from { transform: rotate(0deg);} to { transform: rotate(360deg);} }
-    @keyframes twinkle { 0%,100% { opacity: .4;} 50% { opacity: 1;} }
-
-    .design-shell { animation: floaty 8s ease-in-out infinite; pointer-events: none; }
-    .design-shell-inner { animation: breathe 10s ease-in-out infinite; }
-    .svg-rotate { transform-origin: center; animation: rotateSlow 30s linear infinite; }
-    .twinkle { animation: twinkle 4s ease-in-out infinite; }
-
-    @media (prefers-reduced-motion: reduce) {
-      .design-shell, .design-shell-inner, .svg-rotate, .twinkle { animation: none !important; }
+    /* Utilidades UI */
+    .safe-bottom { padding-bottom: calc(1.5rem + env(safe-area-inset-bottom)); }
+    .glass { 
+      backdrop-filter: blur(12px); 
+      -webkit-backdrop-filter: blur(12px); 
+      box-shadow: 0 4px 30px rgba(0, 0, 0, 0.05);
     }
     
-    /* Scrollbar oculta pero funcional */
-    .no-scrollbar::-webkit-scrollbar { display: none; }
-    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    /* Animaciones de entrada */
+    .fade-in { animation: fadeIn .4s cubic-bezier(0.16, 1, 0.3, 1); }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px);} to { opacity:1; transform: translateY(0);} }
+
+    /* Animaciones Decorativas */
+    @keyframes floaty { 0%,100% { transform: translateY(0);} 50% { transform: translateY(-5px);} }
+    @keyframes breathe { 0%,100% { transform: scale(1);} 50% { transform: scale(1.02);} }
+    @keyframes rotateSlow { from { transform: rotate(0deg);} to { transform: rotate(360deg);} }
+    @keyframes twinkle { 0%,100% { opacity: .4;} 50% { opacity: 1;} }
+    @keyframes wiggle { 0%,100% { transform: rotate(-1deg);} 50% { transform: rotate(1deg);} }
+
+    .anim-float { animation: floaty 6s ease-in-out infinite; }
+    .anim-breathe { animation: breathe 8s ease-in-out infinite; }
+    .svg-rotate { transform-origin: center; transform-box: fill-box; animation: rotateSlow 40s linear infinite; }
+    .twinkle { animation: twinkle 3s ease-in-out infinite; }
+    .wiggle { animation: wiggle 5s ease-in-out infinite; }
+
+    /* Inputs y Elementos */
+    summary::-webkit-details-marker { display: none; }
+    button { touch-action: manipulation; }
+    input[type="date"] { -webkit-appearance: none; min-height: 52px; }
+    
+    /* Scroll oculto pero funcional */
+    .scrollbar-hide::-webkit-scrollbar { display: none; }
+    .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
   </style>
 </head>
 <body>
   <div id="root"></div>
 
   <script type="text/babel">
-    const { useEffect, useMemo, useState, memo, useCallback } = React;
+    const { useEffect, useMemo, useState, useCallback, useRef, memo } = React;
 
-    // ================== CONSTANTS & UTILS ==================
-    const KEYS = { session: "wol_session_v3", users: "wol_users_v3" };
-    const TOTAL_WEEKS = 4160;
-
+    // --- CONFIG & UTILS ---
+    const KEYS = { session: "wol_session_v2", users: "wol_users_v2" };
+    
+    // Funciones de almacenamiento seguras
     const safeGet = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
     const safeSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
-    const loadJSON = (k, fb) => { const r = safeGet(k); try { return r ? JSON.parse(r) : fb; } catch { return fb; } };
+    const loadJSON = (k, fb) => { const r = safeGet(k); if (!r) return fb; try { return JSON.parse(r); } catch { return fb; } };
     const saveJSON = (k, o) => safeSet(k, JSON.stringify(o));
+
+    // Utilidades Matemáticas y de Fecha
     const clamp = (n, a, b) => Math.min(b, Math.max(a, n));
-    const fmtInt = (n) => Math.round(n).toLocaleString();
+    const fmtInt = (n) => Math.round(n).toLocaleString(undefined);
+    
+    function parseISODateToLocalMidnight(iso) {
+      if (!iso) return null;
+      const parts = iso.split("-");
+      if (parts.length !== 3) return null;
+      const y = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10);
+      const d = parseInt(parts[2], 10);
+      if (!y || !m || !d) return null;
+      return new Date(y, m - 1, d, 0, 0, 0, 0);
+    }
 
     function isoToday() {
       const now = new Date();
-      return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const y = now.getFullYear();
+      const m = String(now.getMonth() + 1).padStart(2, "0");
+      const d = String(now.getDate()).padStart(2, "0");
+      return `${y}-${m}-${d}`;
     }
 
-    // Hash simple para contraseñas y RNG
-    async function passwordHash(u, p) {
-      let h = 0xdeadbeef;
-      const s = u + ":" + p + ":saltv3";
-      for(let i=0; i<s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 2654435761);
-      return ((h ^ h >>> 16) >>> 0).toString(16);
+    function isBirthdayToday(birthISO) {
+      const b = parseISODateToLocalMidnight(birthISO);
+      if (!b) return false;
+      const now = new Date();
+      return (b.getMonth() === now.getMonth()) && (b.getDate() === now.getDate());
     }
 
-    // ================== DATA: THEMES, I18N, MOODS ==================
+    // Generador de números pseudo-aleatorios (determinista)
+    function hashToUint(str) {
+      let h = 2166136261 >>> 0;
+      for (let i = 0; i < str.length; i++) {
+        h ^= str.charCodeAt(i);
+        h = Math.imul(h, 16777619);
+      }
+      return h >>> 0;
+    }
+    function makeRng(seed) {
+      let x = seed >>> 0;
+      return () => {
+        x ^= x << 13; x >>>= 0;
+        x ^= x >>> 17; x >>>= 0;
+        x ^= x << 5;  x >>>= 0;
+        return (x >>> 0) / 4294967296;
+      };
+    }
+    function pickNUnique(arr, n, rng) {
+      const a = arr.slice();
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(rng() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      return a.slice(0, Math.min(n, a.length));
+    }
+
+    // Seguridad Básica (Hashing)
+    async function sha256Hex(text) {
+      if (window.crypto?.subtle?.digest) {
+        try {
+          const enc = new TextEncoder().encode(text);
+          const buf = await crypto.subtle.digest("SHA-256", enc);
+          return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
+        } catch (e) { console.warn("Crypto subtle failed, falling back"); }
+      }
+      return String(hashToUint(text));
+    }
+    async function passwordHash(username, password) {
+      return await sha256Hex("wol:v2:" + username + ":" + password);
+    }
+
+    // --- DATA CONSTANTS ---
     const THEMES = {
-      minimal: { label:{es:"Minimal",en:"Minimal"}, bg:"bg-white", text:"text-gray-900", textSecondary:"text-gray-600", card:"bg-gray-50", border:"border-gray-200", weekPast:"#111827", weekFuture:"#e5e7eb", weekCurrent:"#3b82f6", accent:"bg-black" },
-      dark: { label:{es:"Oscuro",en:"Dark"}, bg:"bg-gray-950", text:"text-gray-100", textSecondary:"text-gray-400", card:"bg-gray-900", border:"border-gray-800", weekPast:"#6b7280", weekFuture:"#1f2937", weekCurrent:"#06b6d4", accent:"bg-white" },
-      warm: { label:{es:"Cálido",en:"Warm"}, bg:"bg-orange-50", text:"text-orange-950", textSecondary:"text-orange-800", card:"bg-orange-100/50", border:"border-orange-200", weekPast:"#c2410c", weekFuture:"#fed7aa", weekCurrent:"#ea580c", accent:"bg-orange-600" },
-      ocean: { label:{es:"Océano",en:"Ocean"}, bg:"bg-slate-900", text:"text-slate-100", textSecondary:"text-slate-400", card:"bg-slate-800", border:"border-slate-700", weekPast:"#3b82f6", weekFuture:"#1e293b", weekCurrent:"#0ea5e9", accent:"bg-blue-500" },
-      neon: { label:{es:"Cyber",en:"Cyber"}, bg:"bg-black", text:"text-green-400", textSecondary:"text-green-800", card:"bg-zinc-900", border:"border-green-900", weekPast:"#22c55e", weekFuture:"#18181b", weekCurrent:"#f0f", accent:"bg-green-500" },
+      minimal: { label:{es:"Minimal",en:"Minimal"}, bg:"bg-white", text:"text-slate-900", textSecondary:"text-slate-500", card:"bg-white", border:"border-slate-200", accent:"bg-slate-900", accentHover:"hover:bg-slate-800", track:"bg-slate-100",
+        hex:{ text:"#0f172a", textSecondary:"#64748b", weekPast:"#334155", weekFuture:"#e2e8f0", weekCurrent:"#3b82f6", accent:"#0f172a", track:"#e2e8f0" } },
+      dark: { label:{es:"Oscuro",en:"Dark"}, bg:"bg-slate-950", text:"text-slate-50", textSecondary:"text-slate-400", card:"bg-slate-900", border:"border-slate-800", accent:"bg-indigo-600", accentHover:"hover:bg-indigo-500", track:"bg-slate-800",
+        hex:{ text:"#f8fafc", textSecondary:"#94a3b8", weekPast:"#6366f1", weekFuture:"#1e293b", weekCurrent:"#22d3ee", accent:"#6366f1", track:"#1e293b" } },
+      warm: { label:{es:"Cálido",en:"Warm"}, bg:"bg-stone-50", text:"text-stone-800", textSecondary:"text-stone-500", card:"bg-white", border:"border-stone-200", accent:"bg-orange-600", accentHover:"hover:bg-orange-700", track:"bg-stone-200",
+        hex:{ text:"#292524", textSecondary:"#78716c", weekPast:"#ea580c", weekFuture:"#e7e5e4", weekCurrent:"#ef4444", accent:"#ea580c", track:"#e7e5e4" } },
+      ocean: { label:{es:"Océano",en:"Ocean"}, bg:"bg-cyan-50", text:"text-cyan-950", textSecondary:"text-cyan-700", card:"bg-white", border:"border-cyan-200", accent:"bg-cyan-700", accentHover:"hover:bg-cyan-800", track:"bg-cyan-200",
+        hex:{ text:"#083344", textSecondary:"#0e7490", weekPast:"#0891b2", weekFuture:"#cffafe", weekCurrent:"#06b6d4", accent:"#0e7490", track:"#cffafe" } },
+      forest: { label:{es:"Bosque",en:"Forest"}, bg:"bg-emerald-50", text:"text-emerald-950", textSecondary:"text-emerald-700", card:"bg-white", border:"border-emerald-200", accent:"bg-emerald-700", accentHover:"hover:bg-emerald-800", track:"bg-emerald-200",
+        hex:{ text:"#022c22", textSecondary:"#047857", weekPast:"#059669", weekFuture:"#d1fae5", weekCurrent:"#10b981", accent:"#047857", track:"#d1fae5" } },
+      rose: { label:{es:"Rosa",en:"Rose"}, bg:"bg-rose-50", text:"text-rose-950", textSecondary:"text-rose-700", card:"bg-white", border:"border-rose-200", accent:"bg-rose-600", accentHover:"hover:bg-rose-700", track:"bg-rose-200",
+        hex:{ text:"#4c0519", textSecondary:"#be123c", weekPast:"#e11d48", weekFuture:"#ffe4e6", weekCurrent:"#fb7185", accent:"#e11d48", track:"#ffe4e6" } },
+      neon: { label:{es:"Neón",en:"Neon"}, bg:"bg-black", text:"text-white", textSecondary:"text-zinc-400", card:"bg-zinc-900", border:"border-zinc-800", accent:"bg-fuchsia-600", accentHover:"hover:bg-fuchsia-500", track:"bg-zinc-800",
+        hex:{ text:"#ffffff", textSecondary:"#a1a1aa", weekPast:"#d946ef", weekFuture:"#27272a", weekCurrent:"#4ade80", accent:"#d946ef", track:"#27272a" } },
     };
 
     const MOODS = [
-      { id:"happy", label:{es:"Genial", en:"Great"}, color:"#22c55e" },
-      { id:"calm", label:{es:"Calmado", en:"Calm"}, color:"#06b6d4" },
-      { id:"focused", label:{es:"Enfocado", en:"Focused"}, color:"#3b82f6" },
-      { id:"tired", label:{es:"Cansado", en:"Tired"}, color:"#737373" },
-      { id:"anxious", label:{es:"Ansioso", en:"Anxious"}, color:"#f59e0b" },
-      { id:"sad", label:{es:"Triste", en:"Sad"}, color:"#6366f1" },
+      { id:"happy", label:{es:"Feliz", en:"Happy"}, color:"#22c55e", kind:"pos" },
+      { id:"calm", label:{es:"Calmado", en:"Calm"}, color:"#06b6d4", kind:"pos" },
+      { id:"focused", label:{es:"Enfocado", en:"Focused"}, color:"#3b82f6", kind:"pos" },
+      { id:"grateful", label:{es:"Agradecido", en:"Grateful"}, color:"#eab308", kind:"pos" },
+      { id:"tired", label:{es:"Cansado", en:"Tired"}, color:"#737373", kind:"neg" },
+      { id:"sad", label:{es:"Triste", en:"Sad"}, color:"#6366f1", kind:"neg" },
+      { id:"angry", label:{es:"Enfadado", en:"Angry"}, color:"#ef4444", kind:"neg" },
+      { id:"anxious", label:{es:"Ansioso", en:"Anxious"}, color:"#f97316", kind:"neg" },
     ];
+
+    const DEFAULT_CONTEXT = {
+      populationAtBirth: 6900000000,
+      populationNow: 8100000000,
+      birthsPerYear: 140000000,
+      deathsPerYear: 60000000,
+    };
 
     const I18N = {
       es: {
-        appTitle:"Tu vida en semanas", settings:"Ajustes", close:"Cerrar",
-        login:"Entrar", register:"Registrar", user:"Usuario", pass:"Contraseña",
-        logout:"Cerrar sesión", createAccount:"Crear cuenta", haveAccount:"Ya tengo cuenta",
-        birthQuestion:"¿Cuándo naciste?", save:"Guardar",
-        weeksLived:"Semanas vividas", weeksLeft:"Semanas restantes",
-        moodTitle:"¿Cómo estás hoy?", moodLog:"Registrar",
-        highlights:"Hitos de vida", cosmic:"Perspectiva Cósmica",
-        error:"Error", invalidDate:"Fecha inválida", userExists:"Usuario ya existe", authFail:"Credenciales incorrectas"
+        appTitle:"Tu vida en semanas", appSubtitle:"Visualiza tu tiempo (80 años = 4160 semanas)",
+        next:"Siguiente", back:"Atrás", skip:"Omitir", settings:"Ajustes", close:"Cerrar", start:"Empezar", save:"Guardar",
+        language:"Idioma", spanish:"Español", english:"Inglés", theme:"Tema", design:"Diseño", profile:"Perfil",
+        register:"Crear Cuenta", login:"Iniciar Sesión", username:"Usuario", password:"Contraseña", logout:"Cerrar sesión",
+        exportData:"Exportar datos", importData:"Importar datos", 
+        exportHintTitle:"Copia de Seguridad",
+        exportHintBody:"Copia este código y guárdalo en un lugar seguro. Pégalo en otro dispositivo para transferir tu progreso.",
+        importPlaceholder: "Pega aquí tu código de exportación...",
+        importError: "Código inválido", importSuccess: "Datos importados correctamente",
+        copy:"Copiar código", copied:"¡Copiado!", whenBorn:"¿Cuándo naciste?", yourLife:"Tu vida",
+        weeksLived:"Semanas vividas", daysLived:"Días vividos", lifeProgress:"Progreso de vida", weeksLeft:"Te quedan aprox.", weeks:"semanas",
+        invalidFuture:"La fecha no puede ser en el futuro.",
+        moodTodayTitle:"¿Cómo estás hoy?", moodTodaySubtitle:"Registra tu día con un toque.", moodLogNow:"Registrar ánimo",
+        mood:"Estado de ánimo", history90:"Últimos 90 días",
+        highlights:"Puntos destacados", societal:"Contexto global", cosmic:"Perspectiva cósmica", nature:"Ciclos naturales",
+        optionalNumbers:"Datos numéricos (avanzado)", birthdayTitle:"¡Feliz Cumpleaños!", birthdayDismiss:"Gracias",
+        birthdayMsg: "Hoy celebramos otra vuelta al sol. Tómate un momento para respirar.",
+        onboardingTitle:"Tu tiempo es finito", onboardingSubtitle:"Una perspectiva visual para vivir con intención.",
+        chooseAuth:"Para empezar, necesitamos guardar tus datos de forma segura en este dispositivo.",
+        alreadyHave:"Ya tengo cuenta", createNew:"Crear nueva cuenta",
+        setBirthdate:"Configura tu fecha de nacimiento", done:"Continuar",
+        deleteAccount: "Borrar cuenta", deleteConfirm: "¿Estás seguro? Esto borrará todo."
       },
       en: {
-        appTitle:"Your life in weeks", settings:"Settings", close:"Close",
-        login:"Log in", register:"Sign up", user:"Username", pass:"Password",
-        logout:"Log out", createAccount:"Create account", haveAccount:"I have an account",
-        birthQuestion:"When were you born?", save:"Save",
-        weeksLived:"Weeks lived", weeksLeft:"Weeks left",
-        moodTitle:"How are you today?", moodLog:"Log mood",
-        highlights:"Life Highlights", cosmic:"Cosmic Perspective",
-        error:"Error", invalidDate:"Invalid date", userExists:"User exists", authFail:"Invalid credentials"
+        appTitle:"Your life in weeks", appSubtitle:"Visualize your time (80 years = 4,160 weeks)",
+        next:"Next", back:"Back", skip:"Skip", settings:"Settings", close:"Close", start:"Start", save:"Save",
+        language:"Language", spanish:"Spanish", english:"English", theme:"Theme", design:"Design", profile:"Profile",
+        register:"Sign Up", login:"Log In", username:"Username", password:"Password", logout:"Log out",
+        exportData:"Export Data", importData:"Import Data", 
+        exportHintTitle:"Backup & Transfer",
+        exportHintBody:"Copy this code and save it. Paste it on another device to restore your data.",
+        importPlaceholder: "Paste your export code here...",
+        importError: "Invalid code", importSuccess: "Data imported successfully",
+        copy:"Copy Code", copied:"Copied!", whenBorn:"When were you born?", yourLife:"Your life",
+        weeksLived:"Weeks lived", daysLived:"Days lived", lifeProgress:"Life Progress", weeksLeft:"Approx.", weeks:"weeks left",
+        invalidFuture:"Birthdate cannot be in the future.",
+        moodTodayTitle:"How are you today?", moodTodaySubtitle:"Log your mood with one tap.", moodLogNow:"Log mood",
+        mood:"Mood History", history90:"Last 90 days",
+        highlights:"Life Highlights", societal:"Global Context", cosmic:"Cosmic Perspective", nature:"Natural Cycles",
+        optionalNumbers:"Numeric Data (Advanced)", birthdayTitle:"Happy Birthday!", birthdayDismiss:"Thanks",
+        birthdayMsg: "Today we celebrate another trip around the sun. Take a moment to breathe.",
+        onboardingTitle:"Your time is finite", onboardingSubtitle:"A visual perspective to live with intention.",
+        chooseAuth:"To start, let's save your data securely on this device.",
+        alreadyHave:"I have an account", createNew:"Create account",
+        setBirthdate:"Set your birthdate", done:"Continue",
+        deleteAccount: "Delete account", deleteConfirm: "Are you sure? This will delete everything."
       }
     };
 
-    // ================== GLOBAL COMPONENTS (Moved OUTSIDE App) ==================
-    
-    // Iconos
-    const IconX = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>;
-    const IconSettings = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>;
+    // --- ICONS (SVG) ---
+    const Icons = {
+      Settings: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>,
+      X: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>,
+      Chevron: ({ open }) => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: open ? "rotate(180deg)" : "rotate(0deg)", transition: "transform .2s ease" }}><polyline points="6 9 12 15 18 9"></polyline></svg>,
+      Check: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+    };
 
-    // UI Generica
+    // --- UI COMPONENTS ---
     const Modal = ({ open, onClose, children }) => {
       if (!open) return null;
       return (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-4 backdrop-blur-sm" onClick={onClose}>
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl fade-in overflow-hidden" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-end mb-2">
-              <button onClick={onClose} className="p-1 opacity-50 hover:opacity-100 transition-opacity"><IconX/></button>
-            </div>
-            {children}
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm fade-in" onClick={onClose}>
+          <div className="w-full max-w-sm rounded-3xl bg-white shadow-2xl overflow-hidden transform transition-all" onClick={e => e.stopPropagation()}>
+             {children}
           </div>
         </div>
       );
     };
 
-    const Accordion = ({ title, children, themeColors }) => {
-      const [isOpen, setIsOpen] = useState(false);
+    const Accordion = ({ title, children, defaultOpen=false, themeColors, icon }) => {
+      const [open, setOpen] = useState(defaultOpen);
       return (
-        <div className={`mb-3 border rounded-xl overflow-hidden transition-all ${themeColors.border} ${themeColors.card}`}>
-          <button onClick={() => setIsOpen(!isOpen)} className="w-full p-4 flex justify-between items-center font-semibold text-left">
-            <span>{title}</span>
-            <span className={`transform transition-transform ${isOpen ? 'rotate-180' : ''}`}>▼</span>
+        <div className={`${themeColors.card} border ${themeColors.border} rounded-2xl mb-3 overflow-hidden transition-all duration-300`}>
+          <button onClick={() => setOpen(o => !o)} className="w-full px-5 py-4 flex items-center justify-between focus:outline-none bg-inherit">
+            <span className="font-semibold text-sm tracking-wide flex items-center gap-2">
+              {icon} {title}
+            </span>
+            <Icons.Chevron open={open} />
           </button>
-          {isOpen && <div className="p-4 pt-0 text-sm opacity-90">{children}</div>}
+          <div className={`transition-all duration-300 ease-in-out ${open ? "max-h-96 opacity-100" : "max-h-0 opacity-0"}`}>
+            <div className="px-5 pb-5 pt-0 overflow-y-auto max-h-80 scrollbar-hide">
+              {children}
+            </div>
+          </div>
         </div>
       );
     };
 
-    // Componente de Grilla Memoizado (Clave para rendimiento)
-    const WeeksGrid = memo(({ weeksLived, themeColors }) => {
-      return (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(5px,1fr))] sm:grid-cols-[repeat(52,1fr)] gap-[2px] w-full mt-8 select-none">
-          {Array.from({ length: TOTAL_WEEKS }).map((_, i) => {
-            const isPast = i < weeksLived;
-            const isCurrent = i === weeksLived;
-            let bg = isPast ? themeColors.weekPast : themeColors.weekFuture;
-            if (isCurrent) bg = themeColors.weekCurrent;
-            
-            return (
-              <div 
-                key={i} 
-                className={`aspect-square rounded-[0.5px] ${isCurrent ? 'animate-pulse' : ''}`}
-                style={{ backgroundColor: bg }} 
-              />
-            );
-          })}
-        </div>
-      );
-    }, (prev, next) => prev.weeksLived === next.weeksLived && prev.themeColors === next.themeColors);
+    // --- LOGIC: STATS COMPUTATION ---
+    function computeStats(birthISO, context) {
+      const birth = parseISODateToLocalMidnight(birthISO);
+      if (!birth) return { invalid: true };
+      const now = new Date();
+      if (birth.getTime() > now.getTime()) return { invalid:true, messageKey:"invalidFuture" };
 
-    // ================== MAIN APP ==================
+      const msDay = 86400000;
+      const msWeek = msDay * 7;
+      const diffMs = now.getTime() - birth.getTime();
+
+      const daysLived = Math.floor(diffMs / msDay);
+      const weeksLived = Math.floor(diffMs / msWeek);
+      const totalWeeks = 4160; // 80 años
+      const weeksLivedClamped = clamp(weeksLived, 0, totalWeeks);
+      const weeksRemaining = Math.max(0, totalWeeks - weeksLivedClamped);
+      const pct = clamp(Math.round((weeksLivedClamped / totalWeeks) * 100), 0, 100);
+
+      // Datos curiosos
+      const yearsLived = Math.floor(daysLived / 365.2425);
+      const monthsLived = Math.floor((daysLived % 365.2425) / 30.436875);
+      const minutesLived = Math.floor(diffMs / 60000);
+      const heartBeats = minutesLived * 72;
+      const breaths = minutesLived * 16;
+      const sleepHours = daysLived * 8;
+      const seasons = Math.floor(daysLived / 91.31);
+      const lunarCycles = Math.floor(daysLived / 29.53059);
+      const tripsAroundSun = Math.floor(daysLived / 365.2425);
+      
+      const earthAroundSunKm = (daysLived / 365.2425) * 940000000; // km per orbit
+      const solarSystemKm = (diffMs/1000) * 220; // 220 km/s
+      const lifespanPercentOfUniverse = ((daysLived/365.25) / 13800000000) * 100;
+
+      const births = (daysLived/365.25) * Number(context.birthsPerYear || 0);
+      const deaths = (daysLived/365.25) * Number(context.deathsPerYear || 0);
+
+      return {
+        invalid:false, birth, now, totalWeeks,
+        weeksLived, weeksLivedClamped, weeksRemaining, percentageLived: pct,
+        daysLived, yearsLived, monthsLived,
+        heartBeats, breaths, sleepHours, seasons, lunarCycles, tripsAroundSun,
+        earthAroundSunKm, solarSystemKm, lifespanPercentOfUniverse,
+        estBirths: births, estDeaths: deaths
+      };
+    }
+
+    // --- VISUALIZERS (MEMOIZED) ---
+    const Visualizer = memo(({ type, stats, colors }) => {
+      const { weeksLivedClamped: lived, totalWeeks } = stats;
+      
+      const weekColor = useCallback((i) => {
+        if (i < lived) return colors.hex.weekPast;
+        if (i === lived) return colors.hex.weekCurrent;
+        return colors.hex.weekFuture;
+      }, [lived, colors]);
+
+      if (type === "grid") {
+        // Optimización: Solo dibujamos bloques, controlamos el render con CSS Grid
+        const cells = Array.from({ length: totalWeeks }).map((_, i) => {
+           const isCurrent = i === lived;
+           return (
+             <div key={i} className={`rounded-[1px] ${isCurrent ? "animate-pulse ring-2 ring-offset-1 ring-blue-400 z-10" : ""}`}
+               style={{ 
+                 backgroundColor: weekColor(i),
+                 width: '100%', paddingTop: '100%' // Aspect ratio 1:1
+               }} 
+             />
+           );
+        });
+        return (
+          <div className="grid gap-[1px]" style={{ gridTemplateColumns: `repeat(52, minmax(0, 1fr))` }}>
+            {cells}
+          </div>
+        );
+      }
+
+      if (type === "snake") {
+        const cells = [];
+        for (let r=0; r<80; r++) {
+          for (let c=0; c<52; c++) {
+            // Lógica de serpiente: filas pares van ->, impares van <-
+            const idx = (r % 2 === 0) ? (r*52 + c) : (r*52 + (51-c));
+            const isCurrent = idx === lived;
+            cells.push(
+              <div key={`${r}-${c}`} className={`rounded-[1px] ${isCurrent ? "animate-pulse z-10 scale-150" : ""}`}
+                style={{ backgroundColor: weekColor(idx), width:'100%', paddingTop:'100%' }} />
+            );
+          }
+        }
+        return (
+          <div className="grid gap-[1px] wiggle" style={{ gridTemplateColumns: `repeat(52, minmax(0, 1fr))` }}>
+            {cells}
+          </div>
+        );
+      }
+      
+      if (type === "columns") {
+        // Columnas verticales de 52 semanas (años)
+        return (
+          <div className="flex flex-row gap-[1px] h-64 items-end justify-center overflow-hidden opacity-90">
+             {Array.from({length: 80}).map((_, y) => {
+               const yearStart = y*52;
+               const weeksInYear = Math.min(52, Math.max(0, lived - yearStart));
+               const isCurrentYear = (lived >= yearStart && lived < yearStart+52);
+               const heightPct = (weeksInYear / 52) * 100;
+               
+               return (
+                 <div key={y} className="flex-1 flex flex-col justify-end h-full relative group">
+                   <div className="w-full bg-current opacity-20 absolute inset-0 rounded-t-sm" style={{ color: colors.hex.weekFuture }}></div>
+                   <div className={`w-full transition-all duration-1000 ${isCurrentYear?"animate-pulse":""}`} 
+                        style={{ height: `${heightPct}%`, backgroundColor: isCurrentYear ? colors.hex.weekCurrent : colors.hex.weekPast }} />
+                 </div>
+               )
+             })}
+          </div>
+        );
+      }
+
+      if (type === "circle" || type === "spiral" || type === "constellation") {
+         // SVG Renderers
+         const W=340, H=340, cx=W/2, cy=H/2;
+         let els = [];
+         
+         if (type === "circle") {
+            const rings=80, perRing=52;
+            for(let y=0; y<rings; y++) {
+               const r = 35 + (115/rings)*y;
+               for(let w=0; w<perRing; w++) {
+                  const idx = y*perRing + w;
+                  const ang = (w/perRing)*Math.PI*2 - Math.PI/2;
+                  const isCurrent = idx === lived;
+                  els.push(<circle key={idx} cx={cx + r*Math.cos(ang)} cy={cy + r*Math.sin(ang)} r={isCurrent?2.5:1.2} fill={weekColor(idx)} />);
+               }
+            }
+         } else if (type === "spiral") {
+            const turns=14;
+            for(let i=0; i<totalWeeks; i++) {
+               const t = i/(totalWeeks-1);
+               const ang = t * Math.PI*2 * turns - Math.PI/2;
+               const r = 10 + t*140;
+               const isCurrent = i === lived;
+               els.push(<circle key={i} cx={cx + r*Math.cos(ang)} cy={cy + r*Math.sin(ang)} r={isCurrent?3:1.2} fill={weekColor(i)} />);
+            }
+         } else if (type === "constellation") {
+            // Pseudo-random estable
+            let seed = 12345;
+            const rng = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
+            for(let i=0; i<totalWeeks; i++) {
+               const ang = rng() * Math.PI*2;
+               const r = Math.sqrt(rng()) * 150;
+               const isCurrent = i === lived;
+               const op = isCurrent ? 1 : 0.8;
+               const size = isCurrent ? 3 : (rng() > 0.9 ? 1.8 : 1.0);
+               els.push(<circle key={i} cx={cx + r*Math.cos(ang)} cy={cy + r*Math.sin(ang)} r={size} fill={weekColor(i)} opacity={op} />);
+            }
+         }
+
+         return (
+           <svg viewBox={`0 0 ${W} ${H}`} className={`w-full h-auto max-w-[340px] mx-auto block ${type!=="constellation"?"svg-rotate":""}`}>
+              <g>{els}</g>
+              {type === "circle" && (
+                <text x="50%" y="50%" dy=".3em" textAnchor="middle" className="text-2xl font-bold" fill={colors.hex.text}>
+                  {stats.percentageLived}%
+                </text>
+              )}
+           </svg>
+         );
+      }
+      return null;
+    });
+
+
+    // --- MAIN APP COMPONENT ---
     function App() {
-      // --- STATE ---
+      // 1. Estado Global
       const [users, setUsers] = useState(() => loadJSON(KEYS.users, {}));
       const [session, setSession] = useState(() => loadJSON(KEYS.session, null));
-      const [view, setView] = useState("loading"); // loading, auth, setup, home
-      
-      // Form States (ahora controlados dentro de App pero los inputs son directos)
-      const [authUser, setAuthUser] = useState("");
-      const [authPass, setAuthPass] = useState("");
-      const [isRegister, setIsRegister] = useState(false);
-      const [authError, setAuthError] = useState("");
-      
-      const [birthInput, setBirthInput] = useState("");
-      const [showSettings, setShowSettings] = useState(false);
-      const [showMood, setShowMood] = useState(false);
-
-      // --- DERIVED ---
       const currentUser = session?.username ? users[session.username] : null;
+
+      // 2. Estado UI local
+      const [flow, setFlow] = useState("loading"); // loading, welcome, register, login, setBirthdate, home
+      const [showSettings, setShowSettings] = useState(false);
+      const [showMoodModal, setShowMoodModal] = useState(false);
+      const [showBirthday, setShowBirthday] = useState(false);
+
+      // 3. Inputs de formularios
+      const [formUser, setFormUser] = useState("");
+      const [formPass, setFormPass] = useState("");
+      const [formError, setFormError] = useState("");
+      const [tempDate, setTempDate] = useState("");
+      const [importCode, setImportCode] = useState("");
+      const [importMsg, setImportMsg] = useState(null);
+
+      // 4. Preferencias (o defaults)
       const lang = currentUser?.prefs?.lang || "es";
-      const themeKey = currentUser?.prefs?.theme || "minimal";
-      const t = (k) => I18N[lang][k] || k;
-      const themeColors = THEMES[themeKey];
+      const theme = currentUser?.prefs?.theme || "minimal";
+      const design = currentUser?.prefs?.design || "grid";
+      const context = currentUser?.context || DEFAULT_CONTEXT;
+
+      // 5. Helpers derivados
+      const t = (k) => I18N[lang]?.[k] ?? I18N.en?.[k] ?? k;
+      const themeColors = useMemo(() => THEMES[theme] || THEMES.minimal, [theme]);
+      const stats = useMemo(() => currentUser?.birthdate ? computeStats(currentUser.birthdate, context) : null, [currentUser?.birthdate, context]);
 
       // --- EFFECTS ---
       useEffect(() => {
-        if (!session) setView("auth");
-        else if (!currentUser?.birthdate) setView("setup");
-        else setView("home");
-      }, [session, currentUser]);
+        // Router inicial
+        if (session?.username) {
+           if (users[session.username]?.birthdate) setFlow("home");
+           else setFlow("setBirthdate");
+        } else {
+           setFlow("welcome");
+        }
+      }, []); // Run once on mount
+
+      useEffect(() => saveJSON(KEYS.users, users), [users]);
+      useEffect(() => saveJSON(KEYS.session, session), [session]);
 
       useEffect(() => {
-        // Daily Mood Prompt Check
-        if (currentUser?.birthdate && view === "home") {
+        // Chequeo de cumpleaños y mood diario
+        if (flow === "home" && stats && !stats.invalid) {
           const today = isoToday();
-          if (!currentUser.moods?.[today]) {
-            // Pequeño timeout para que no sea intrusivo al cargar
-            const timer = setTimeout(() => setShowMood(true), 1500);
-            return () => clearTimeout(timer);
+          
+          // Birthday Check
+          if (isBirthdayToday(currentUser.birthdate)) {
+             const lastShown = currentUser.birthdayShownISO;
+             if (lastShown !== today) {
+                setShowBirthday(true);
+                confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
+                updateCurrentUser({ birthdayShownISO: today });
+             }
+          }
+
+          // Mood Check
+          const moods = currentUser.moods || {};
+          if (!moods[today] && !showBirthday) {
+             // Pequeño delay para no abrumar al entrar
+             setTimeout(() => setShowMoodModal(true), 1500);
           }
         }
-      }, [currentUser, view]);
+      }, [flow, currentUser]);
 
-      // --- LOGIC ---
-      const handleAuth = async (e) => {
-        e.preventDefault();
-        setAuthError("");
-        if (!authUser || !authPass) return;
-        const hash = await passwordHash(authUser, authPass);
-        
+      // --- ACTIONS ---
+      const updateCurrentUser = (patch) => {
+        if (!session?.username) return;
+        setUsers(prev => ({
+          ...prev,
+          [session.username]: { ...prev[session.username], ...patch }
+        }));
+      };
+
+      const handleAuth = async (isRegister) => {
+        setFormError("");
+        const u = formUser.trim().toLowerCase();
+        const p = formPass;
+        if (!u || !p) return;
+
+        const hash = await passwordHash(u, p);
+
         if (isRegister) {
-          if (users[authUser]) return setAuthError(t("userExists"));
-          const newUser = { username: authUser, passHash: hash, prefs: { lang: "es", theme: "minimal" }, moods: {} };
-          const nextUsers = { ...users, [authUser]: newUser };
-          setUsers(nextUsers);
-          saveJSON(KEYS.users, nextUsers);
-          setSession({ username: authUser });
-          saveJSON(KEYS.session, { username: authUser });
+          if (users[u]) return setFormError(lang==="es"?"Usuario ya existe":"User exists");
+          const newUser = {
+            version: 2, username: u, passHash: hash, createdAt: Date.now(),
+            birthdate: "", prefs: { lang: "es", theme: "minimal", design: "grid" },
+            moods: {}, context: { ...DEFAULT_CONTEXT }
+          };
+          setUsers(curr => ({ ...curr, [u]: newUser }));
+          setSession({ username: u });
+          setFlow("setBirthdate");
         } else {
-          const u = users[authUser];
-          if (!u || u.passHash !== hash) return setAuthError(t("authFail"));
-          setSession({ username: authUser });
-          saveJSON(KEYS.session, { username: authUser });
+          const rec = users[u];
+          if (!rec || rec.passHash !== hash) return setFormError(lang==="es"?"Credenciales inválidas":"Invalid credentials");
+          setSession({ username: u });
+          setFlow(rec.birthdate ? "home" : "setBirthdate");
+        }
+        setFormUser(""); setFormPass("");
+      };
+
+      const handleLogout = () => {
+        setSession(null);
+        setFlow("welcome");
+        setShowSettings(false);
+      };
+
+      const handleSaveBirthdate = () => {
+        if (!tempDate) return;
+        const s = computeStats(tempDate, context);
+        if (s.invalid) return setFormError(t("invalidFuture"));
+        updateCurrentUser({ birthdate: tempDate });
+        setFlow("home");
+      };
+
+      const handleExport = () => {
+        if(!currentUser) return;
+        const dataStr = JSON.stringify(currentUser);
+        const b64 = btoa(unescape(encodeURIComponent(dataStr))); // Simple Base64 encode safe for utf8
+        navigator.clipboard.writeText(b64).then(() => {
+           alert(t("copied"));
+        });
+      };
+
+      const handleImport = () => {
+        try {
+          const jsonStr = decodeURIComponent(escape(atob(importCode)));
+          const data = JSON.parse(jsonStr);
+          if (data.username && data.passHash) {
+             setUsers(prev => ({ ...prev, [data.username]: data }));
+             setSession({ username: data.username });
+             setImportMsg({ type: 'success', text: t("importSuccess") });
+             setTimeout(() => window.location.reload(), 1000);
+          } else {
+             throw new Error();
+          }
+        } catch (e) {
+          setImportMsg({ type: 'error', text: t("importError") });
         }
       };
 
-      const saveBirth = () => {
-        if (!birthInput) return;
-        const d = new Date(birthInput);
-        if (d > new Date()) return alert(t("invalidDate"));
-        
-        const nextUsers = { ...users, [session.username]: { ...currentUser, birthdate: birthInput } };
-        setUsers(nextUsers);
-        saveJSON(KEYS.users, nextUsers);
-      };
+      // --- SUB-COMPONENTS FOR PAGES ---
 
-      const updatePref = (key, val) => {
-        const nextUsers = { ...users, [session.username]: { ...currentUser, prefs: { ...currentUser.prefs, [key]: val } } };
-        setUsers(nextUsers);
-        saveJSON(KEYS.users, nextUsers);
-      };
-
-      const logMood = (moodId) => {
-        const today = isoToday();
-        const nextUsers = { ...users, [session.username]: { ...currentUser, moods: { ...(currentUser.moods||{}), [today]: moodId } } };
-        setUsers(nextUsers);
-        saveJSON(KEYS.users, nextUsers);
-        setShowMood(false);
-      };
-
-      const stats = useMemo(() => {
-        if (!currentUser?.birthdate) return null;
-        const birth = new Date(currentUser.birthdate);
-        const now = new Date();
-        const diff = now - birth;
-        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-        const weeks = Math.floor(days / 7);
-        const heartbeats = Math.floor(diff / 1000 * 1.2); // approx
-        const breaths = Math.floor(diff / 1000 * 0.25);
-        return { 
-          days, weeks, 
-          left: Math.max(0, TOTAL_WEEKS - weeks), 
-          pct: ((weeks/TOTAL_WEEKS)*100).toFixed(1),
-          heartbeats, breaths,
-          earthTravel: Math.floor(days * 2.57), // million km approx
-          moonCycles: Math.floor(days / 29.5)
-        };
-      }, [currentUser]);
-
-      // --- RENDERS ---
-
-      if (view === "loading") return <div className="h-screen flex items-center justify-center">...</div>;
-
-      // 1. AUTH SCREEN
-      if (view === "auth") {
-        return (
-          <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-white text-gray-900 overflow-hidden relative">
-            {/* Design Shell para autenticación */}
-            <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none overflow-hidden">
-               <div className="absolute top-[-20%] right-[-20%] w-[50vh] h-[50vh] bg-blue-400 rounded-full blur-[100px] design-shell"></div>
-               <div className="absolute bottom-[-10%] left-[-10%] w-[40vh] h-[40vh] bg-purple-400 rounded-full blur-[80px] design-shell-inner"></div>
-            </div>
-
-            <div className="z-10 w-full max-w-sm fade-in">
-              <h1 className="text-4xl font-bold mb-2 tracking-tighter">{t("appTitle")}</h1>
-              <p className="text-gray-500 mb-8">Memento mori. Memento vivere.</p>
-              
-              <form onSubmit={handleAuth} className="space-y-4">
-                <input 
-                  type="text" 
-                  placeholder={t("user")} 
-                  value={authUser} 
-                  onChange={e => setAuthUser(e.target.value)}
-                  className="w-full p-4 bg-gray-100 rounded-xl outline-none focus:ring-2 focus:ring-black transition-all"
-                />
-                <input 
-                  type="password" 
-                  placeholder={t("pass")} 
-                  value={authPass} 
-                  onChange={e => setAuthPass(e.target.value)}
-                  className="w-full p-4 bg-gray-100 rounded-xl outline-none focus:ring-2 focus:ring-black transition-all"
-                />
-                {authError && <p className="text-red-500 text-sm font-medium">{authError}</p>}
-                <button className="w-full bg-black text-white p-4 rounded-xl font-bold hover:scale-[1.02] transition-transform">
-                  {isRegister ? t("createAccount") : t("login")}
-                </button>
-              </form>
-              
-              <button onClick={() => { setIsRegister(!isRegister); setAuthError(""); }} className="mt-4 text-sm text-gray-500 underline w-full text-center">
-                {isRegister ? t("haveAccount") : t("createAccount")}
-              </button>
-            </div>
-          </div>
-        );
-      }
-
-      // 2. SETUP SCREEN
-      if (view === "setup") {
-        return (
-          <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-white text-gray-900 fade-in">
-            <h2 className="text-2xl font-bold mb-6">{t("birthQuestion")}</h2>
-            <input 
-              type="date" 
-              value={birthInput}
-              onChange={e => setBirthInput(e.target.value)}
-              className="p-4 bg-gray-100 rounded-xl text-xl outline-none mb-6"
-            />
-            <button onClick={saveBirth} className="bg-black text-white px-8 py-3 rounded-full font-bold">{t("save")}</button>
-          </div>
-        );
-      }
-
-      // 3. HOME SCREEN
-      return (
-        <div className={`min-h-screen transition-colors duration-500 ${themeColors.bg} ${themeColors.text} ${themeKey === 'neon' ? 'font-mono' : 'font-sans'}`}>
-          
-          {/* Fondo Atmosférico Dinámico */}
-          {themeKey !== 'minimal' && (
-            <div className="fixed inset-0 pointer-events-none opacity-20 overflow-hidden">
-               <div className={`absolute top-0 right-0 w-[60vw] h-[60vw] rounded-full blur-[120px] mix-blend-screen design-shell ${themeColors.accent}`}></div>
-            </div>
-          )}
-
-          <div className="relative z-10 max-w-3xl mx-auto p-6 safe-top safe-bottom">
-            {/* Header */}
-            <div className="flex justify-between items-start mb-8">
-              <div>
-                <h1 className="text-5xl font-black tracking-tighter leading-none mb-1">{stats.pct}%</h1>
-                <p className={`text-sm uppercase tracking-widest font-bold opacity-60`}>{t("weeksLived")}</p>
-              </div>
-              <button onClick={() => setShowSettings(true)} className={`p-2 rounded-full hover:bg-black/5 transition-colors opacity-70`}>
-                <IconSettings />
+      // 1. Settings Screen
+      const SettingsView = () => (
+        <div className={`fixed inset-0 z-40 overflow-y-auto ${themeColors.bg} ${themeColors.text} safe-bottom fade-in`}>
+          <div className="max-w-md mx-auto p-6 pt-12">
+            <div className="flex justify-between items-center mb-8">
+              <h2 className="text-3xl font-bold tracking-tight">{t("settings")}</h2>
+              <button onClick={() => setShowSettings(false)} className={`p-2 rounded-full hover:bg-black/5`}>
+                <Icons.X />
               </button>
             </div>
 
-            {/* Tarjetas de Datos (Stats) */}
-            <div className="grid grid-cols-2 gap-3 mb-8">
-              <div className={`p-5 rounded-2xl border ${themeColors.card} ${themeColors.border} backdrop-blur-sm`}>
-                <div className="text-3xl font-bold mb-1">{fmtInt(stats.weeks)}</div>
-                <div className={`text-xs opacity-60 ${themeColors.textSecondary}`}>{t("weeksLived")}</div>
-              </div>
-              <div className={`p-5 rounded-2xl border ${themeColors.card} ${themeColors.border} backdrop-blur-sm`}>
-                <div className="text-3xl font-bold mb-1">{fmtInt(stats.left)}</div>
-                <div className={`text-xs opacity-60 ${themeColors.textSecondary}`}>{t("weeksLeft")}</div>
-              </div>
-            </div>
+            <div className="space-y-6">
+              <Accordion title={t("language")} themeColors={themeColors} defaultOpen={true}>
+                <div className="grid grid-cols-2 gap-3">
+                  {['es', 'en'].map(l => (
+                    <button key={l} onClick={() => updateCurrentUser({ prefs: { ...currentUser.prefs, lang: l } })}
+                      className={`p-3 rounded-xl border text-sm font-medium transition-all ${lang===l ? themeColors.accent + " text-white border-transparent shadow-lg" : themeColors.border}`}>
+                      {l === 'es' ? t("spanish") : t("english")}
+                    </button>
+                  ))}
+                </div>
+              </Accordion>
 
-            {/* Accordions de Información Extra */}
-            <Accordion title={t("highlights")} themeColors={themeColors}>
-              <ul className="space-y-2 opacity-80">
-                <li>❤️ {fmtInt(stats.heartbeats)} heartbeats</li>
-                <li>🫁 {fmtInt(stats.breaths)} breaths</li>
-                <li>😴 {fmtInt(stats.days * 8)} hours slept</li>
-              </ul>
-            </Accordion>
-            
-            <Accordion title={t("cosmic")} themeColors={themeColors}>
-              <p className="mb-2">Viaje galáctico desde tu nacimiento:</p>
-              <ul className="space-y-2 opacity-80">
-                <li>🌍 {fmtInt(stats.earthTravel)} M km orbitados</li>
-                <li>🌑 {fmtInt(stats.moonCycles)} lunas llenas vividas</li>
-              </ul>
-            </Accordion>
+              <Accordion title={t("theme")} themeColors={themeColors}>
+                <div className="grid grid-cols-2 gap-3">
+                  {Object.keys(THEMES).map(k => (
+                    <button key={k} onClick={() => updateCurrentUser({ prefs: { ...currentUser.prefs, theme: k } })}
+                      className={`p-3 rounded-xl border text-sm font-medium transition-all ${theme===k ? "ring-2 ring-offset-2 ring-gray-400 border-transparent" : themeColors.border} ${THEMES[k].bg === 'bg-white' ? 'bg-gray-50' : THEMES[k].bg}`}>
+                      <span className={THEMES[k].text}>{THEMES[k].label[lang] || THEMES[k].label.en}</span>
+                    </button>
+                  ))}
+                </div>
+              </Accordion>
 
-            {/* Grilla Principal */}
-            <WeeksGrid weeksLived={stats.weeks} themeColors={themeColors} />
-            
-            <div className="mt-12 text-center opacity-40 text-xs">
-               MEMENTO MORI // WOL V3
+              <Accordion title={t("design")} themeColors={themeColors}>
+                 <div className="grid grid-cols-2 gap-3">
+                   {["grid","circle","wave","spiral","columns","constellation","snake"].map(d => (
+                     <button key={d} onClick={() => updateCurrentUser({ prefs: { ...currentUser.prefs, design: d } })}
+                       className={`p-3 rounded-xl border text-sm capitalize transition-all ${design===d ? themeColors.accent + " text-white border-transparent shadow-lg" : themeColors.border}`}>
+                       {d}
+                     </button>
+                   ))}
+                 </div>
+              </Accordion>
+
+              <Accordion title={t("exportHintTitle")} themeColors={themeColors}>
+                 <div className="space-y-4">
+                    <p className="text-sm opacity-80 leading-relaxed">{t("exportHintBody")}</p>
+                    <button onClick={handleExport} className={`w-full py-3 rounded-xl border font-semibold flex items-center justify-center gap-2 ${themeColors.border} hover:bg-black/5`}>
+                      {t("copy")}
+                    </button>
+                    <hr className="border-t border-black/10 my-4" />
+                    <p className="text-sm opacity-80 font-medium">{t("importData")}</p>
+                    <textarea 
+                      className={`w-full p-3 rounded-xl text-xs font-mono border ${themeColors.border} bg-transparent focus:ring-2 focus:ring-blue-500 outline-none`}
+                      rows="3"
+                      placeholder={t("importPlaceholder")}
+                      value={importCode} onChange={e => setImportCode(e.target.value)}
+                    />
+                    {importMsg && <div className={`text-xs ${importMsg.type==='error'?'text-red-500':'text-green-500'}`}>{importMsg.text}</div>}
+                    <button onClick={handleImport} disabled={!importCode} className={`w-full py-2 rounded-xl text-sm font-semibold text-white ${themeColors.accent} disabled:opacity-50`}>
+                      {t("importData")}
+                    </button>
+                 </div>
+              </Accordion>
+
+              <div className="pt-6">
+                <button onClick={handleLogout} className="w-full py-4 text-red-500 font-semibold text-sm hover:bg-red-50 rounded-xl transition-colors">
+                  {t("logout")}
+                </button>
+              </div>
             </div>
           </div>
-
-          {/* MODAL SETTINGS */}
-          <Modal open={showSettings} onClose={() => setShowSettings(false)}>
-             <h2 className="text-xl font-bold mb-4 text-gray-900">{t("settings")}</h2>
-             
-             <div className="space-y-6">
-               <div>
-                 <label className="block text-sm font-bold text-gray-500 mb-2 uppercase">Idioma / Language</label>
-                 <div className="flex gap-2">
-                   {['es', 'en'].map(l => (
-                     <button key={l} onClick={() => updatePref('lang', l)} className={`px-4 py-2 rounded-lg border text-sm font-bold ${lang === l ? 'bg-black text-white' : 'bg-gray-100 text-gray-500'}`}>
-                       {l.toUpperCase()}
-                     </button>
-                   ))}
-                 </div>
-               </div>
-
-               <div>
-                 <label className="block text-sm font-bold text-gray-500 mb-2 uppercase">Tema / Theme</label>
-                 <div className="grid grid-cols-3 gap-2">
-                   {Object.entries(THEMES).map(([k, v]) => (
-                     <button 
-                       key={k} 
-                       onClick={() => updatePref('theme', k)}
-                       className={`p-2 rounded-lg border text-xs font-medium transition-all ${themeKey === k ? 'ring-2 ring-black border-transparent' : 'border-gray-200'}`}
-                       style={{ background: k === 'dark' || k === 'neon' || k === 'ocean' ? '#111' : '#f3f4f6', color: k === 'dark' || k === 'neon' || k === 'ocean' ? '#fff' : '#000' }}
-                     >
-                       {v.label[lang]}
-                     </button>
-                   ))}
-                 </div>
-               </div>
-
-               <div className="pt-4 border-t">
-                 <button onClick={() => { setSession(null); saveJSON(KEYS.session, null); }} className="w-full p-3 text-red-500 font-bold bg-red-50 rounded-xl">
-                   {t("logout")}
-                 </button>
-               </div>
-             </div>
-          </Modal>
-
-          {/* MODAL MOOD */}
-          <Modal open={showMood} onClose={() => setShowMood(false)}>
-            <h2 className="text-xl font-bold mb-1 text-gray-900 text-center">{t("moodTitle")}</h2>
-            <p className="text-center text-gray-500 text-sm mb-6">Registra tu estado para ver patrones.</p>
-            <div className="grid grid-cols-2 gap-3">
-              {MOODS.map(m => (
-                <button 
-                  key={m.id} 
-                  onClick={() => logMood(m.id)}
-                  className="p-3 rounded-xl border border-gray-100 bg-gray-50 hover:bg-gray-100 flex items-center justify-center gap-2 transition-transform active:scale-95"
-                >
-                  <span className="w-3 h-3 rounded-full" style={{background:m.color}}></span>
-                  <span className="text-gray-700 font-medium">{m.label[lang]}</span>
-                </button>
-              ))}
-            </div>
-          </Modal>
-
         </div>
       );
+
+      // 2. Onboarding / Auth
+      if (flow === "welcome" || flow === "register" || flow === "login") {
+        return (
+          <div className="min-h-screen flex items-center justify-center p-6 bg-white text-slate-900 relative overflow-hidden">
+            {/* Background Decorations */}
+            <div className="absolute top-[-10%] right-[-10%] w-64 h-64 bg-blue-100 rounded-full blur-3xl opacity-60 animate-pulse"></div>
+            <div className="absolute bottom-[-10%] left-[-10%] w-80 h-80 bg-purple-100 rounded-full blur-3xl opacity-60 animate-pulse" style={{animationDelay:"1s"}}></div>
+
+            <div className="w-full max-w-md relative z-10 fade-in">
+              <div className="text-center mb-10">
+                <div className="inline-block p-4 rounded-2xl bg-slate-50 mb-4 shadow-sm anim-float">
+                  <div className="w-8 h-8 bg-slate-900 rounded-md grid grid-cols-2 gap-1 p-1">
+                     <div className="bg-white rounded-[1px] opacity-40"></div><div className="bg-white rounded-[1px] opacity-40"></div>
+                     <div className="bg-blue-400 rounded-[1px]"></div><div className="bg-white rounded-[1px] opacity-20"></div>
+                  </div>
+                </div>
+                <h1 className="text-4xl font-extrabold tracking-tight text-slate-900 mb-2">{t("appTitle")}</h1>
+                <p className="text-slate-500 text-lg">{t("onboardingSubtitle")}</p>
+              </div>
+
+              {flow === "welcome" ? (
+                 <div className="space-y-4">
+                   <button onClick={() => setFlow("register")} className="w-full py-4 bg-slate-900 text-white rounded-2xl font-semibold shadow-xl shadow-slate-200 hover:scale-[1.02] transition-transform">
+                     {t("createNew")}
+                   </button>
+                   <button onClick={() => setFlow("login")} className="w-full py-4 bg-white border border-slate-200 text-slate-700 rounded-2xl font-semibold hover:bg-slate-50 transition-colors">
+                     {t("alreadyHave")}
+                   </button>
+                 </div>
+              ) : (
+                <div className="bg-white/80 glass border border-white/50 p-8 rounded-3xl shadow-xl space-y-5 fade-in">
+                   <h2 className="text-xl font-bold">{flow==="register" ? t("register") : t("login")}</h2>
+                   <input className="w-full p-4 bg-slate-50 rounded-xl outline-none focus:ring-2 focus:ring-slate-900 transition-all" 
+                          placeholder={t("username")} value={formUser} onChange={e=>setFormUser(e.target.value)} autoCapitalize="none" />
+                   <input className="w-full p-4 bg-slate-50 rounded-xl outline-none focus:ring-2 focus:ring-slate-900 transition-all" 
+                          placeholder={t("password")} type="password" value={formPass} onChange={e=>setFormPass(e.target.value)} />
+                   
+                   {formError && <div className="text-red-500 text-sm font-medium text-center">{formError}</div>}
+
+                   <button onClick={() => handleAuth(flow==="register")} className="w-full py-4 bg-slate-900 text-white rounded-xl font-bold hover:shadow-lg transition-all">
+                     {t(flow==="register" ? "register" : "login")}
+                   </button>
+                   <button onClick={() => { setFlow("welcome"); setFormError(""); }} className="w-full py-2 text-slate-400 text-sm">
+                     {t("back")}
+                   </button>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      }
+
+      // 3. Set Birthdate
+      if (flow === "setBirthdate") {
+        return (
+          <div className="min-h-screen flex items-center justify-center p-6 bg-slate-50">
+            <div className="w-full max-w-md bg-white p-8 rounded-3xl shadow-xl fade-in">
+               <h2 className="text-2xl font-bold mb-2">{t("setBirthdate")}</h2>
+               <p className="text-slate-500 mb-6">{t("onboardingSubtitle")}</p>
+               <input type="date" className="w-full p-4 border rounded-xl mb-4 text-lg bg-white" 
+                      value={tempDate} onChange={e=>setTempDate(e.target.value)} />
+               {formError && <div className="text-red-500 text-sm mb-4">{formError}</div>}
+               <button onClick={handleSaveBirthdate} disabled={!tempDate} 
+                 className="w-full py-4 bg-slate-900 text-white rounded-xl font-bold disabled:opacity-50">
+                 {t("done")}
+               </button>
+            </div>
+          </div>
+        );
+      }
+
+      // 4. Main Home Dashboard
+      if (flow === "home" && stats) {
+        // Generar Insights (simple)
+        const insights = [
+          t("weeksLived") + ": " + fmtInt(stats.weeksLived),
+          t("daysLived") + ": " + fmtInt(stats.daysLived),
+          stats.seasons + " estaciones vividas.",
+          stats.heartBeats.toLocaleString() + " latidos aprox.",
+          stats.sleepHours.toLocaleString() + " horas dormidas."
+        ];
+
+        return (
+          <div className={`min-h-screen ${themeColors.bg} ${themeColors.text} transition-colors duration-500`}>
+            {/* Header */}
+            <header className="px-6 pt-12 pb-6 max-w-lg mx-auto flex justify-between items-end">
+              <div>
+                <h1 className="text-3xl font-extrabold tracking-tight leading-tight">{t("yourLife")}</h1>
+                <p className={`${themeColors.textSecondary} font-medium`}>{stats.percentageLived}% completado</p>
+              </div>
+              <button onClick={() => setShowSettings(true)} className={`p-3 rounded-full ${themeColors.card} shadow-sm border ${themeColors.border}`}>
+                <Icons.Settings />
+              </button>
+            </header>
+
+            <main className="px-4 pb-24 max-w-lg mx-auto space-y-6">
+              
+              {/* Visualizer Card */}
+              <div className={`${themeColors.card} border ${themeColors.border} p-6 rounded-3xl shadow-sm overflow-hidden relative`}>
+                 <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
+                    <div className="text-9xl font-bold leading-none">{stats.yearsLived}</div>
+                 </div>
+                 <div className="py-2">
+                    <Visualizer type={design} stats={stats} colors={themeColors} />
+                 </div>
+                 <div className="mt-6 flex justify-between items-center text-xs font-semibold uppercase tracking-wider opacity-60">
+                   <span>Nacimiento</span>
+                   <span>Hoy</span>
+                   <span>90 Años</span>
+                 </div>
+              </div>
+
+              {/* Progress Bar */}
+              <div className={`${themeColors.card} border ${themeColors.border} p-6 rounded-3xl shadow-sm`}>
+                 <div className="flex justify-between mb-3 text-sm font-medium">
+                   <span>{t("lifeProgress")}</span>
+                   <span>{fmtInt(stats.weeksRemaining)} {t("weeks")}</span>
+                 </div>
+                 <div className={`h-4 w-full rounded-full overflow-hidden ${themeColors.track}`}>
+                   <div className={`h-full ${themeColors.accent} transition-all duration-1000 ease-out`} style={{ width: `${stats.percentageLived}%` }}></div>
+                 </div>
+              </div>
+
+              {/* Highlights Accordions */}
+              <div>
+                <Accordion title={t("highlights")} themeColors={themeColors} defaultOpen={true}>
+                   <ul className={`space-y-3 text-sm leading-relaxed ${themeColors.textSecondary}`}>
+                     {insights.map((line, i) => (
+                       <li key={i} className="flex gap-3">
+                         <span className={`block w-1.5 h-1.5 mt-2 rounded-full flex-shrink-0 ${themeColors.accent}`}></span>
+                         {line}
+                       </li>
+                     ))}
+                   </ul>
+                </Accordion>
+                <Accordion title={t("societal")} themeColors={themeColors}>
+                   <p className={`text-sm ${themeColors.textSecondary}`}>La población mundial ha crecido de ~{fmtInt(context.populationAtBirth)} a ~{fmtInt(context.populationNow)} durante tu vida.</p>
+                </Accordion>
+                <Accordion title={t("cosmic")} themeColors={themeColors}>
+                   <p className={`text-sm ${themeColors.textSecondary}`}>Has viajado {stats.earthAroundSunKm.toExponential(2)} km alrededor del sol.</p>
+                </Accordion>
+              </div>
+
+              {/* Mood Tracker */}
+              <div className={`${themeColors.card} border ${themeColors.border} p-6 rounded-3xl shadow-sm`}>
+                <div className="flex justify-between items-center mb-4">
+                  <span className="font-bold">{t("mood")}</span>
+                  <button onClick={() => setShowMoodModal(true)} className={`text-xs font-bold px-3 py-1 rounded-full border ${themeColors.border}`}>
+                    + {t("moodLogNow")}
+                  </button>
+                </div>
+                {/* Mood Heatmap (Last 90 days) */}
+                <div className="flex flex-wrap gap-1 justify-end">
+                   {Array.from({length:90}).map((_, i) => {
+                      const d = new Date();
+                      d.setDate(d.getDate() - (89-i));
+                      const y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,'0'), day = String(d.getDate()).padStart(2,'0');
+                      const iso = `${y}-${m}-${day}`;
+                      const moodId = currentUser.moods?.[iso];
+                      const mood = MOODS.find(m => m.id === moodId);
+                      const bg = mood ? mood.color : (theme==='dark'?'#334155':'#e2e8f0');
+                      return <div key={i} className="w-[8px] h-[8px] rounded-[1px]" style={{ backgroundColor: bg }} title={iso} />
+                   })}
+                </div>
+              </div>
+
+            </main>
+
+            {/* Modals */}
+            {showSettings && <SettingsView />}
+            
+            <Modal open={showMoodModal} onClose={() => setShowMoodModal(false)}>
+               <div className="p-6 text-center bg-white text-slate-900">
+                  <h3 className="text-xl font-bold mb-1">{t("moodTodayTitle")}</h3>
+                  <p className="text-slate-500 text-sm mb-6">{t("moodTodaySubtitle")}</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    {MOODS.map(m => (
+                      <button key={m.id} 
+                        onClick={() => {
+                          const today = isoToday();
+                          updateCurrentUser({ moods: { ...currentUser.moods, [today]: m.id } });
+                          setShowMoodModal(false);
+                        }}
+                        className="p-3 rounded-xl border border-slate-100 bg-slate-50 hover:bg-slate-100 flex items-center gap-2 transition-colors">
+                        <div className="w-3 h-3 rounded-full" style={{background:m.color}}></div>
+                        <span className="text-sm font-medium text-slate-700">{m.label[lang]||m.label.en}</span>
+                      </button>
+                    ))}
+                  </div>
+               </div>
+            </Modal>
+
+            <Modal open={showBirthday} onClose={() => setShowBirthday(false)}>
+              <div className="p-8 text-center bg-white text-slate-900 relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-red-400 via-yellow-400 to-blue-400"></div>
+                <div className="mb-4 text-5xl">🎂</div>
+                <h3 className="text-2xl font-bold mb-2">{t("birthdayTitle")}</h3>
+                <p className="text-slate-600 mb-6 leading-relaxed">{t("birthdayMsg")}</p>
+                <button onClick={() => setShowBirthday(false)} className="px-8 py-3 bg-slate-900 text-white rounded-xl font-bold shadow-lg shadow-slate-200">
+                   {t("birthdayDismiss")}
+                </button>
+              </div>
+            </Modal>
+          </div>
+        );
+      }
+
+      return <div className="min-h-screen flex items-center justify-center text-slate-400 animate-pulse">Loading...</div>;
     }
 
     const root = ReactDOM.createRoot(document.getElementById("root"));
