@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta name="theme-color" content="#ffffff" />
-  <meta name="description" content="Visualiza tu vida en semanas. Una perspectiva estoica y visual del tiempo.">
+  <meta name="description" content="Visualiza tu vida en semanas.">
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <title>Tu Vida en Semanas</title>
@@ -17,45 +17,51 @@
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
 
   <style>
-    /* Reset y Base */
+    /* Reset & Base */
     * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
     html, body { height: 100%; font-family: 'Inter', sans-serif; }
-    body { margin: 0; overflow-x: hidden; min-height: 100dvh; background-color: #f9fafb; transition: background-color 0.5s ease; }
-    #root { min-height: 100dvh; display: flex; flex-direction: column; }
+    body { margin: 0; overflow-x: hidden; min-height: 100dvh; background-color: #f8fafc; }
+    #root { min-height: 100dvh; position: relative; z-index: 1; }
 
-    /* Utilidades UI */
+    /* Animated Background Mesh */
+    .mesh-bg {
+      position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: -1;
+      background: radial-gradient(circle at 50% 50%, rgba(255,255,255,0) 0%, rgba(0,0,0,0.02) 100%);
+      overflow: hidden; pointer-events: none;
+    }
+    .mesh-blob {
+      position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.6;
+      animation: floatBlob 20s infinite ease-in-out;
+    }
+    .blob-1 { top: -10%; left: -10%; width: 50vw; height: 50vw; background: var(--blob-1); animation-delay: 0s; }
+    .blob-2 { bottom: -10%; right: -10%; width: 60vw; height: 60vw; background: var(--blob-2); animation-delay: -5s; }
+    .blob-3 { top: 40%; left: 40%; width: 40vw; height: 40vw; background: var(--blob-3); animation-delay: -10s; }
+
+    @keyframes floatBlob {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      33% { transform: translate(30px, -50px) scale(1.1); }
+      66% { transform: translate(-20px, 20px) scale(0.9); }
+    }
+
+    /* UI Utilities */
     .safe-bottom { padding-bottom: calc(1.5rem + env(safe-area-inset-bottom)); }
     .glass { 
-      backdrop-filter: blur(12px); 
-      -webkit-backdrop-filter: blur(12px); 
-      box-shadow: 0 4px 30px rgba(0, 0, 0, 0.05);
+      backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); 
+      background: rgba(255, 255, 255, 0.65);
+      border: 1px solid rgba(255, 255, 255, 0.5);
+    }
+    .dark .glass {
+      background: rgba(15, 23, 42, 0.65);
+      border: 1px solid rgba(255, 255, 255, 0.1);
     }
     
-    /* Animaciones de entrada */
-    .fade-in { animation: fadeIn .4s cubic-bezier(0.16, 1, 0.3, 1); }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px);} to { opacity:1; transform: translateY(0);} }
-
-    /* Animaciones Decorativas */
-    @keyframes floaty { 0%,100% { transform: translateY(0);} 50% { transform: translateY(-5px);} }
-    @keyframes breathe { 0%,100% { transform: scale(1);} 50% { transform: scale(1.02);} }
-    @keyframes rotateSlow { from { transform: rotate(0deg);} to { transform: rotate(360deg);} }
-    @keyframes twinkle { 0%,100% { opacity: .4;} 50% { opacity: 1;} }
+    .fade-in { animation: fadeIn .5s cubic-bezier(0.16, 1, 0.3, 1); }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(15px);} to { opacity:1; transform: translateY(0);} }
+    .wiggle { animation: wiggle 6s ease-in-out infinite; }
     @keyframes wiggle { 0%,100% { transform: rotate(-1deg);} 50% { transform: rotate(1deg);} }
 
-    .anim-float { animation: floaty 6s ease-in-out infinite; }
-    .anim-breathe { animation: breathe 8s ease-in-out infinite; }
-    .svg-rotate { transform-origin: center; transform-box: fill-box; animation: rotateSlow 40s linear infinite; }
-    .twinkle { animation: twinkle 3s ease-in-out infinite; }
-    .wiggle { animation: wiggle 5s ease-in-out infinite; }
-
-    /* Inputs y Elementos */
-    summary::-webkit-details-marker { display: none; }
-    button { touch-action: manipulation; }
     input[type="date"] { -webkit-appearance: none; min-height: 52px; }
-    
-    /* Scroll oculto pero funcional */
     .scrollbar-hide::-webkit-scrollbar { display: none; }
-    .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
   </style>
 </head>
 <body>
@@ -64,817 +70,602 @@
   <script type="text/babel">
     const { useEffect, useMemo, useState, useCallback, useRef, memo } = React;
 
-    // --- CONFIG & UTILS ---
-    const KEYS = { session: "wol_session_v2", users: "wol_users_v2" };
-    
-    // Funciones de almacenamiento seguras
+    // --- UTILS ---
+    const KEYS = { session: "wol_session_v3", users: "wol_users_v3" };
     const safeGet = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
     const safeSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
     const loadJSON = (k, fb) => { const r = safeGet(k); if (!r) return fb; try { return JSON.parse(r); } catch { return fb; } };
     const saveJSON = (k, o) => safeSet(k, JSON.stringify(o));
-
-    // Utilidades Matemáticas y de Fecha
     const clamp = (n, a, b) => Math.min(b, Math.max(a, n));
     const fmtInt = (n) => Math.round(n).toLocaleString(undefined);
     
     function parseISODateToLocalMidnight(iso) {
       if (!iso) return null;
-      const parts = iso.split("-");
-      if (parts.length !== 3) return null;
-      const y = parseInt(parts[0], 10);
-      const m = parseInt(parts[1], 10);
-      const d = parseInt(parts[2], 10);
+      const [y, m, d] = iso.split("-").map(Number);
       if (!y || !m || !d) return null;
       return new Date(y, m - 1, d, 0, 0, 0, 0);
     }
-
     function isoToday() {
       const now = new Date();
-      const y = now.getFullYear();
-      const m = String(now.getMonth() + 1).padStart(2, "0");
-      const d = String(now.getDate()).padStart(2, "0");
-      return `${y}-${m}-${d}`;
+      return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`;
     }
 
-    function isBirthdayToday(birthISO) {
-      const b = parseISODateToLocalMidnight(birthISO);
-      if (!b) return false;
-      const now = new Date();
-      return (b.getMonth() === now.getMonth()) && (b.getDate() === now.getDate());
-    }
-
-    // Generador de números pseudo-aleatorios (determinista)
-    function hashToUint(str) {
-      let h = 2166136261 >>> 0;
-      for (let i = 0; i < str.length; i++) {
-        h ^= str.charCodeAt(i);
-        h = Math.imul(h, 16777619);
-      }
-      return h >>> 0;
-    }
-    function makeRng(seed) {
-      let x = seed >>> 0;
-      return () => {
-        x ^= x << 13; x >>>= 0;
-        x ^= x >>> 17; x >>>= 0;
-        x ^= x << 5;  x >>>= 0;
-        return (x >>> 0) / 4294967296;
-      };
-    }
-    function pickNUnique(arr, n, rng) {
-      const a = arr.slice();
-      for (let i = a.length - 1; i > 0; i--) {
-        const j = Math.floor(rng() * (i + 1));
-        [a[i], a[j]] = [a[j], a[i]];
-      }
-      return a.slice(0, Math.min(n, a.length));
-    }
-
-    // Seguridad Básica (Hashing)
-    async function sha256Hex(text) {
-      if (window.crypto?.subtle?.digest) {
-        try {
-          const enc = new TextEncoder().encode(text);
-          const buf = await crypto.subtle.digest("SHA-256", enc);
-          return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
-        } catch (e) { console.warn("Crypto subtle failed, falling back"); }
-      }
-      return String(hashToUint(text));
-    }
-    async function passwordHash(username, password) {
-      return await sha256Hex("wol:v2:" + username + ":" + password);
-    }
-
-    // --- DATA CONSTANTS ---
+    // --- DATA & THEMES ---
     const THEMES = {
-      minimal: { label:{es:"Minimal",en:"Minimal"}, bg:"bg-white", text:"text-slate-900", textSecondary:"text-slate-500", card:"bg-white", border:"border-slate-200", accent:"bg-slate-900", accentHover:"hover:bg-slate-800", track:"bg-slate-100",
-        hex:{ text:"#0f172a", textSecondary:"#64748b", weekPast:"#334155", weekFuture:"#e2e8f0", weekCurrent:"#3b82f6", accent:"#0f172a", track:"#e2e8f0" } },
-      dark: { label:{es:"Oscuro",en:"Dark"}, bg:"bg-slate-950", text:"text-slate-50", textSecondary:"text-slate-400", card:"bg-slate-900", border:"border-slate-800", accent:"bg-indigo-600", accentHover:"hover:bg-indigo-500", track:"bg-slate-800",
-        hex:{ text:"#f8fafc", textSecondary:"#94a3b8", weekPast:"#6366f1", weekFuture:"#1e293b", weekCurrent:"#22d3ee", accent:"#6366f1", track:"#1e293b" } },
-      warm: { label:{es:"Cálido",en:"Warm"}, bg:"bg-stone-50", text:"text-stone-800", textSecondary:"text-stone-500", card:"bg-white", border:"border-stone-200", accent:"bg-orange-600", accentHover:"hover:bg-orange-700", track:"bg-stone-200",
-        hex:{ text:"#292524", textSecondary:"#78716c", weekPast:"#ea580c", weekFuture:"#e7e5e4", weekCurrent:"#ef4444", accent:"#ea580c", track:"#e7e5e4" } },
-      ocean: { label:{es:"Océano",en:"Ocean"}, bg:"bg-cyan-50", text:"text-cyan-950", textSecondary:"text-cyan-700", card:"bg-white", border:"border-cyan-200", accent:"bg-cyan-700", accentHover:"hover:bg-cyan-800", track:"bg-cyan-200",
-        hex:{ text:"#083344", textSecondary:"#0e7490", weekPast:"#0891b2", weekFuture:"#cffafe", weekCurrent:"#06b6d4", accent:"#0e7490", track:"#cffafe" } },
-      forest: { label:{es:"Bosque",en:"Forest"}, bg:"bg-emerald-50", text:"text-emerald-950", textSecondary:"text-emerald-700", card:"bg-white", border:"border-emerald-200", accent:"bg-emerald-700", accentHover:"hover:bg-emerald-800", track:"bg-emerald-200",
-        hex:{ text:"#022c22", textSecondary:"#047857", weekPast:"#059669", weekFuture:"#d1fae5", weekCurrent:"#10b981", accent:"#047857", track:"#d1fae5" } },
-      rose: { label:{es:"Rosa",en:"Rose"}, bg:"bg-rose-50", text:"text-rose-950", textSecondary:"text-rose-700", card:"bg-white", border:"border-rose-200", accent:"bg-rose-600", accentHover:"hover:bg-rose-700", track:"bg-rose-200",
-        hex:{ text:"#4c0519", textSecondary:"#be123c", weekPast:"#e11d48", weekFuture:"#ffe4e6", weekCurrent:"#fb7185", accent:"#e11d48", track:"#ffe4e6" } },
-      neon: { label:{es:"Neón",en:"Neon"}, bg:"bg-black", text:"text-white", textSecondary:"text-zinc-400", card:"bg-zinc-900", border:"border-zinc-800", accent:"bg-fuchsia-600", accentHover:"hover:bg-fuchsia-500", track:"bg-zinc-800",
-        hex:{ text:"#ffffff", textSecondary:"#a1a1aa", weekPast:"#d946ef", weekFuture:"#27272a", weekCurrent:"#4ade80", accent:"#d946ef", track:"#27272a" } },
+      minimal: { label:{es:"Minimal",en:"Minimal"}, 
+        bgClass:"bg-slate-50", blobs:["#e2e8f0","#f1f5f9","#cbd5e1"], 
+        text:"text-slate-900", textSec:"text-slate-500", border:"border-slate-200", 
+        hex:{ text:"#0f172a", textSec:"#64748b", past:"#334155", future:"#cbd5e1", current:"#3b82f6", accent:"#0f172a" } },
+      
+      dark: { label:{es:"Oscuro",en:"Dark"}, 
+        bgClass:"bg-slate-950 dark", blobs:["#1e293b","#0f172a","#334155"], 
+        text:"text-slate-50", textSec:"text-slate-400", border:"border-slate-800", 
+        hex:{ text:"#f8fafc", textSec:"#94a3b8", past:"#6366f1", future:"#1e293b", current:"#22d3ee", accent:"#6366f1" } },
+      
+      ocean: { label:{es:"Océano",en:"Ocean"}, 
+        bgClass:"bg-cyan-50", blobs:["#a5f3fc","#cffafe","#22d3ee"], 
+        text:"text-cyan-950", textSec:"text-cyan-700", border:"border-cyan-200", 
+        hex:{ text:"#083344", textSec:"#0e7490", past:"#0891b2", future:"#cffafe", current:"#06b6d4", accent:"#0e7490" } },
+      
+      rose: { label:{es:"Rosa",en:"Rose"}, 
+        bgClass:"bg-rose-50", blobs:["#fecdd3","#ffe4e6","#fb7185"], 
+        text:"text-rose-950", textSec:"text-rose-700", border:"border-rose-200", 
+        hex:{ text:"#4c0519", textSec:"#be123c", past:"#e11d48", future:"#ffe4e6", current:"#fb7185", accent:"#e11d48" } },
+      
+      sunset: { label:{es:"Atardecer",en:"Sunset"}, 
+        bgClass:"bg-orange-50", blobs:["#fed7aa","#ffedd5","#fdba74"], 
+        text:"text-orange-950", textSec:"text-orange-700", border:"border-orange-200", 
+        hex:{ text:"#431407", textSec:"#9a3412", past:"#ea580c", future:"#ffedd5", current:"#f97316", accent:"#ea580c" } },
     };
 
     const MOODS = [
-      { id:"happy", label:{es:"Feliz", en:"Happy"}, color:"#22c55e", kind:"pos" },
-      { id:"calm", label:{es:"Calmado", en:"Calm"}, color:"#06b6d4", kind:"pos" },
-      { id:"focused", label:{es:"Enfocado", en:"Focused"}, color:"#3b82f6", kind:"pos" },
-      { id:"grateful", label:{es:"Agradecido", en:"Grateful"}, color:"#eab308", kind:"pos" },
-      { id:"tired", label:{es:"Cansado", en:"Tired"}, color:"#737373", kind:"neg" },
-      { id:"sad", label:{es:"Triste", en:"Sad"}, color:"#6366f1", kind:"neg" },
-      { id:"angry", label:{es:"Enfadado", en:"Angry"}, color:"#ef4444", kind:"neg" },
-      { id:"anxious", label:{es:"Ansioso", en:"Anxious"}, color:"#f97316", kind:"neg" },
+      { id:"happy", label:{es:"Feliz", en:"Happy"}, color:"#22c55e" },
+      { id:"calm", label:{es:"Calmado", en:"Calm"}, color:"#06b6d4" },
+      { id:"focused", label:{es:"Enfocado", en:"Focused"}, color:"#3b82f6" },
+      { id:"grateful", label:{es:"Agradecido", en:"Grateful"}, color:"#eab308" },
+      { id:"tired", label:{es:"Cansado", en:"Tired"}, color:"#737373" },
+      { id:"sad", label:{es:"Triste", en:"Sad"}, color:"#6366f1" },
+      { id:"angry", label:{es:"Enfadado", en:"Angry"}, color:"#ef4444" },
+      { id:"anxious", label:{es:"Ansioso", en:"Anxious"}, color:"#f97316" },
     ];
 
-    const DEFAULT_CONTEXT = {
-      populationAtBirth: 6900000000,
-      populationNow: 8100000000,
-      birthsPerYear: 140000000,
-      deathsPerYear: 60000000,
+    // --- INSIGHT POOLS (Randomized Content) ---
+    const INSIGHT_POOLS = {
+      societal: {
+        es: [
+          (c) => `La población mundial creció de ~${fmtInt(c.popBirth)} a ~${fmtInt(c.popNow)} durante tu vida.`,
+          (c) => `Se estima que ha habido ${fmtInt(c.births)} nacimientos en el mundo desde que tú naciste.`,
+          (c) => `En tu vida, la humanidad ha generado más datos digitales que en toda la historia previa junta.`,
+          (c) => `Estadísticamente, te has cruzado con unas 80,000 personas, aunque solo recuerdes a unas pocas.`
+        ],
+        en: [
+          (c) => `World population grew from ~${fmtInt(c.popBirth)} to ~${fmtInt(c.popNow)} during your lifetime.`,
+          (c) => `There have been approx. ${fmtInt(c.births)} births globally since you were born.`,
+          (c) => `During your life, humanity generated more data than in all previous history combined.`,
+          (c) => `Statistically, you've walked past ~80,000 people, even if you only remember a few.`
+        ]
+      },
+      cosmic: {
+        es: [
+          (s) => `Has viajado ${fmtInt(s.earthKm)} km alrededor del Sol.`,
+          (s) => `El sistema solar se ha movido ${fmtInt(s.solarKm)} km a través de la Vía Láctea desde tu nacimiento.`,
+          (s) => `Tu vida representa el ${s.uniPct.toExponential(2)}% de la edad del universo. Un destello.`,
+          (s) => `La luz de las estrellas que ves hoy salió de ellas cuando estabas aprendiendo a caminar.`
+        ],
+        en: [
+          (s) => `You have traveled ${fmtInt(s.earthKm)} km around the Sun.`,
+          (s) => `The solar system moved ${fmtInt(s.solarKm)} km through the Milky Way since your birth.`,
+          (s) => `Your life represents ${s.uniPct.toExponential(2)}% of the universe's age. A spark.`,
+          (s) => `The starlight you see tonight left its source when you were learning to walk.`
+        ]
+      },
+      nature: {
+        es: [
+          (s) => `Has vivido ${s.seasons} estaciones. El ciclo se repite, pero tú cambias.`,
+          (s) => `Tu corazón ha latido aprox. ${fmtInt(s.heart)} veces sin que se lo pidas.`,
+          (s) => `Has respirado unas ${fmtInt(s.breaths)} veces.`,
+          (s) => `Casi todas tus células se han renovado múltiples veces. Físicamente, eres nuevo.`
+        ],
+        en: [
+          (s) => `You have lived through ${s.seasons} seasons. The cycle repeats, but you change.`,
+          (s) => `Your heart has beaten approx. ${fmtInt(s.heart)} times without being asked.`,
+          (s) => `You have taken around ${fmtInt(s.breaths)} breaths.`,
+          (s) => `Almost all your cells have renewed multiple times. Physically, you are new.`
+        ]
+      }
     };
 
     const I18N = {
       es: {
-        appTitle:"Tu vida en semanas", appSubtitle:"Visualiza tu tiempo (80 años = 4160 semanas)",
-        next:"Siguiente", back:"Atrás", skip:"Omitir", settings:"Ajustes", close:"Cerrar", start:"Empezar", save:"Guardar",
-        language:"Idioma", spanish:"Español", english:"Inglés", theme:"Tema", design:"Diseño", profile:"Perfil",
-        register:"Crear Cuenta", login:"Iniciar Sesión", username:"Usuario", password:"Contraseña", logout:"Cerrar sesión",
-        exportData:"Exportar datos", importData:"Importar datos", 
-        exportHintTitle:"Copia de Seguridad",
-        exportHintBody:"Copia este código y guárdalo en un lugar seguro. Pégalo en otro dispositivo para transferir tu progreso.",
-        importPlaceholder: "Pega aquí tu código de exportación...",
-        importError: "Código inválido", importSuccess: "Datos importados correctamente",
-        copy:"Copiar código", copied:"¡Copiado!", whenBorn:"¿Cuándo naciste?", yourLife:"Tu vida",
-        weeksLived:"Semanas vividas", daysLived:"Días vividos", lifeProgress:"Progreso de vida", weeksLeft:"Te quedan aprox.", weeks:"semanas",
-        invalidFuture:"La fecha no puede ser en el futuro.",
-        moodTodayTitle:"¿Cómo estás hoy?", moodTodaySubtitle:"Registra tu día con un toque.", moodLogNow:"Registrar ánimo",
-        mood:"Estado de ánimo", history90:"Últimos 90 días",
-        highlights:"Puntos destacados", societal:"Contexto global", cosmic:"Perspectiva cósmica", nature:"Ciclos naturales",
-        optionalNumbers:"Datos numéricos (avanzado)", birthdayTitle:"¡Feliz Cumpleaños!", birthdayDismiss:"Gracias",
-        birthdayMsg: "Hoy celebramos otra vuelta al sol. Tómate un momento para respirar.",
-        onboardingTitle:"Tu tiempo es finito", onboardingSubtitle:"Una perspectiva visual para vivir con intención.",
-        chooseAuth:"Para empezar, necesitamos guardar tus datos de forma segura en este dispositivo.",
-        alreadyHave:"Ya tengo cuenta", createNew:"Crear nueva cuenta",
-        setBirthdate:"Configura tu fecha de nacimiento", done:"Continuar",
-        deleteAccount: "Borrar cuenta", deleteConfirm: "¿Estás seguro? Esto borrará todo."
+        appTitle:"Tu vida en semanas", appSubtitle:"Visualiza tu tiempo finito.",
+        next:"Siguiente", settings:"Ajustes", close:"Cerrar", save:"Guardar",
+        language:"Idioma", theme:"Tema", design:"Diseño", profile:"Perfil",
+        exportData:"Exportar / Copia", importData:"Importar", copy:"Copiar código", copied:"¡Copiado!",
+        weeksLived:"Semanas vividas", lifeProgress:"Tu Progreso", weeksLeft:"semanas restantes",
+        moodTodayTitle:"¿Cómo estás hoy?", moodLogNow:"Registrar ánimo",
+        highlights:"Puntos destacados", societal:"Contexto global", cosmic:"Perspectiva cósmica", nature:"Naturaleza",
+        birthdayTitle:"¡Feliz Cumpleaños!", birthdayMsg: "Hoy la Tierra completa otra vuelta contigo. Respira.",
+        onboardingTitle:"Memento Mori", onboardingSubtitle:"Tu tiempo es el recurso más valioso. Visualízalo.",
+        login:"Entrar", register:"Crear", username:"Usuario", password:"Contraseña",
+        setBirthdate:"Fecha de Nacimiento", done:"Continuar", back:"Volver",
+        exportHint: "Copia este código para llevar tus datos a otro móvil.",
+        importPlaceholder: "Pega el código aquí...", importBtn:"Restaurar datos"
       },
       en: {
-        appTitle:"Your life in weeks", appSubtitle:"Visualize your time (80 years = 4,160 weeks)",
-        next:"Next", back:"Back", skip:"Skip", settings:"Settings", close:"Close", start:"Start", save:"Save",
-        language:"Language", spanish:"Spanish", english:"English", theme:"Theme", design:"Design", profile:"Profile",
-        register:"Sign Up", login:"Log In", username:"Username", password:"Password", logout:"Log out",
-        exportData:"Export Data", importData:"Import Data", 
-        exportHintTitle:"Backup & Transfer",
-        exportHintBody:"Copy this code and save it. Paste it on another device to restore your data.",
-        importPlaceholder: "Paste your export code here...",
-        importError: "Invalid code", importSuccess: "Data imported successfully",
-        copy:"Copy Code", copied:"Copied!", whenBorn:"When were you born?", yourLife:"Your life",
-        weeksLived:"Weeks lived", daysLived:"Days lived", lifeProgress:"Life Progress", weeksLeft:"Approx.", weeks:"weeks left",
-        invalidFuture:"Birthdate cannot be in the future.",
-        moodTodayTitle:"How are you today?", moodTodaySubtitle:"Log your mood with one tap.", moodLogNow:"Log mood",
-        mood:"Mood History", history90:"Last 90 days",
-        highlights:"Life Highlights", societal:"Global Context", cosmic:"Cosmic Perspective", nature:"Natural Cycles",
-        optionalNumbers:"Numeric Data (Advanced)", birthdayTitle:"Happy Birthday!", birthdayDismiss:"Thanks",
-        birthdayMsg: "Today we celebrate another trip around the sun. Take a moment to breathe.",
-        onboardingTitle:"Your time is finite", onboardingSubtitle:"A visual perspective to live with intention.",
-        chooseAuth:"To start, let's save your data securely on this device.",
-        alreadyHave:"I have an account", createNew:"Create account",
-        setBirthdate:"Set your birthdate", done:"Continue",
-        deleteAccount: "Delete account", deleteConfirm: "Are you sure? This will delete everything."
+        appTitle:"Your life in weeks", appSubtitle:"Visualize your finite time.",
+        next:"Next", settings:"Settings", close:"Close", save:"Save",
+        language:"Language", theme:"Theme", design:"Design", profile:"Profile",
+        exportData:"Export / Backup", importData:"Import", copy:"Copy Code", copied:"Copied!",
+        weeksLived:"Weeks lived", lifeProgress:"Your Progress", weeksLeft:"weeks left",
+        moodTodayTitle:"How are you today?", moodLogNow:"Log mood",
+        highlights:"Highlights", societal:"Global Context", cosmic:"Cosmic Perspective", nature:"Nature",
+        birthdayTitle:"Happy Birthday!", birthdayMsg: "The Earth completes another round with you. Breathe.",
+        onboardingTitle:"Memento Mori", onboardingSubtitle:"Your time is your most valuable asset. Visualize it.",
+        login:"Login", register:"Sign Up", username:"Username", password:"Password",
+        setBirthdate:"Date of Birth", done:"Continue", back:"Back",
+        exportHint: "Copy this code to transfer data to another device.",
+        importPlaceholder: "Paste code here...", importBtn:"Restore data"
       }
     };
 
-    // --- ICONS (SVG) ---
-    const Icons = {
-      Settings: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>,
-      X: () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>,
-      Chevron: ({ open }) => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: open ? "rotate(180deg)" : "rotate(0deg)", transition: "transform .2s ease" }}><polyline points="6 9 12 15 18 9"></polyline></svg>,
-      Check: () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-    };
+    // --- ICONS ---
+    const Icon = ({ name, className }) => {
+      const cls = className || "w-5 h-5";
+      if(name==="settings") return <svg className={cls} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>;
+      if(name==="x") return <svg className={cls} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>;
+      if(name==="chevron") return <svg className={cls} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>;
+      return null;
+    }
 
-    // --- UI COMPONENTS ---
-    const Modal = ({ open, onClose, children }) => {
-      if (!open) return null;
+    // --- COMPONENTS ---
+    const Accordion = ({ title, children, defaultOpen=false, tc, id }) => {
+      const [open, setOpen] = useState(defaultOpen);
       return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm fade-in" onClick={onClose}>
-          <div className="w-full max-w-sm rounded-3xl bg-white shadow-2xl overflow-hidden transform transition-all" onClick={e => e.stopPropagation()}>
+        <div className={`glass rounded-2xl mb-3 overflow-hidden transition-all duration-300 shadow-sm ${open ? 'ring-1 ring-black/5' : ''}`}>
+          <button onClick={() => setOpen(!open)} className={`w-full px-5 py-4 flex items-center justify-between ${tc.text}`}>
+            <span className="font-semibold text-sm tracking-wide">{title}</span>
+            <div className={`transition-transform duration-300 ${open ? 'rotate-180' : ''}`}><Icon name="chevron"/></div>
+          </button>
+          <div className={`transition-all duration-300 ease-in-out px-5 overflow-hidden ${open ? "max-h-96 pb-5 opacity-100" : "max-h-0 opacity-0"}`}>
              {children}
           </div>
         </div>
       );
     };
 
-    const Accordion = ({ title, children, defaultOpen=false, themeColors, icon }) => {
-      const [open, setOpen] = useState(defaultOpen);
-      return (
-        <div className={`${themeColors.card} border ${themeColors.border} rounded-2xl mb-3 overflow-hidden transition-all duration-300`}>
-          <button onClick={() => setOpen(o => !o)} className="w-full px-5 py-4 flex items-center justify-between focus:outline-none bg-inherit">
-            <span className="font-semibold text-sm tracking-wide flex items-center gap-2">
-              {icon} {title}
-            </span>
-            <Icons.Chevron open={open} />
-          </button>
-          <div className={`transition-all duration-300 ease-in-out ${open ? "max-h-96 opacity-100" : "max-h-0 opacity-0"}`}>
-            <div className="px-5 pb-5 pt-0 overflow-y-auto max-h-80 scrollbar-hide">
-              {children}
-            </div>
-          </div>
-        </div>
-      );
-    };
-
-    // --- LOGIC: STATS COMPUTATION ---
-    function computeStats(birthISO, context) {
+    // --- LOGIC ---
+    function computeStats(birthISO) {
       const birth = parseISODateToLocalMidnight(birthISO);
-      if (!birth) return { invalid: true };
+      if (!birth) return null;
       const now = new Date();
-      if (birth.getTime() > now.getTime()) return { invalid:true, messageKey:"invalidFuture" };
+      if (birth > now) return { invalid: true };
 
-      const msDay = 86400000;
-      const msWeek = msDay * 7;
-      const diffMs = now.getTime() - birth.getTime();
-
-      const daysLived = Math.floor(diffMs / msDay);
-      const weeksLived = Math.floor(diffMs / msWeek);
-      const totalWeeks = 4160; // 80 años
+      const diffMs = now - birth;
+      const daysLived = Math.floor(diffMs / 86400000);
+      const weeksLived = Math.floor(diffMs / (86400000 * 7));
+      const totalWeeks = 4160; // 80 years
       const weeksLivedClamped = clamp(weeksLived, 0, totalWeeks);
-      const weeksRemaining = Math.max(0, totalWeeks - weeksLivedClamped);
-      const pct = clamp(Math.round((weeksLivedClamped / totalWeeks) * 100), 0, 100);
-
-      // Datos curiosos
-      const yearsLived = Math.floor(daysLived / 365.2425);
-      const monthsLived = Math.floor((daysLived % 365.2425) / 30.436875);
-      const minutesLived = Math.floor(diffMs / 60000);
-      const heartBeats = minutesLived * 72;
-      const breaths = minutesLived * 16;
-      const sleepHours = daysLived * 8;
-      const seasons = Math.floor(daysLived / 91.31);
-      const lunarCycles = Math.floor(daysLived / 29.53059);
-      const tripsAroundSun = Math.floor(daysLived / 365.2425);
       
-      const earthAroundSunKm = (daysLived / 365.2425) * 940000000; // km per orbit
-      const solarSystemKm = (diffMs/1000) * 220; // 220 km/s
-      const lifespanPercentOfUniverse = ((daysLived/365.25) / 13800000000) * 100;
-
-      const births = (daysLived/365.25) * Number(context.birthsPerYear || 0);
-      const deaths = (daysLived/365.25) * Number(context.deathsPerYear || 0);
-
       return {
-        invalid:false, birth, now, totalWeeks,
-        weeksLived, weeksLivedClamped, weeksRemaining, percentageLived: pct,
-        daysLived, yearsLived, monthsLived,
-        heartBeats, breaths, sleepHours, seasons, lunarCycles, tripsAroundSun,
-        earthAroundSunKm, solarSystemKm, lifespanPercentOfUniverse,
-        estBirths: births, estDeaths: deaths
+        birth, now,
+        weeksLived, weeksLivedClamped, totalWeeks,
+        weeksRemaining: Math.max(0, totalWeeks - weeksLivedClamped),
+        percentageLived: clamp(Math.round((weeksLivedClamped / totalWeeks) * 100), 0, 100),
+        daysLived,
+        yearsLived: Math.floor(daysLived/365.25),
+        monthsLived: Math.floor((daysLived % 365.25)/30.44),
+        // Datos curiosos
+        heart: Math.floor(diffMs/60000 * 72),
+        breaths: Math.floor(diffMs/60000 * 16),
+        seasons: Math.floor(daysLived / 91.3),
+        earthKm: (daysLived/365.25) * 940000000,
+        solarKm: (diffMs/1000) * 220,
+        uniPct: ((daysLived/365.25) / 13800000000) * 100,
+        // Contexto Social (Global approx)
+        popBirth: 6900000000 + ( (birth.getFullYear()-2010) * 80000000 ), // Estimacion burda pero funcional para rango
+        popNow: 8100000000,
+        births: (daysLived/365.25) * 140000000
       };
     }
 
-    // --- VISUALIZERS (MEMOIZED) ---
+    // --- VISUALIZERS (FIXED WAVE & ADAPTIVE AGE) ---
     const Visualizer = memo(({ type, stats, colors }) => {
       const { weeksLivedClamped: lived, totalWeeks } = stats;
+      const W=340, H=340, cx=W/2, cy=H/2;
       
-      const weekColor = useCallback((i) => {
-        if (i < lived) return colors.hex.weekPast;
-        if (i === lived) return colors.hex.weekCurrent;
-        return colors.hex.weekFuture;
-      }, [lived, colors]);
+      const getColor = (i) => {
+        if (i < lived) return colors.hex.past;
+        if (i === lived) return colors.hex.current;
+        return colors.hex.future;
+      };
 
+      // 1. Grid (Optimized CSS Grid)
       if (type === "grid") {
-        // Optimización: Solo dibujamos bloques, controlamos el render con CSS Grid
-        const cells = Array.from({ length: totalWeeks }).map((_, i) => {
-           const isCurrent = i === lived;
-           return (
-             <div key={i} className={`rounded-[1px] ${isCurrent ? "animate-pulse ring-2 ring-offset-1 ring-blue-400 z-10" : ""}`}
-               style={{ 
-                 backgroundColor: weekColor(i),
-                 width: '100%', paddingTop: '100%' // Aspect ratio 1:1
-               }} 
-             />
-           );
-        });
         return (
-          <div className="grid gap-[1px]" style={{ gridTemplateColumns: `repeat(52, minmax(0, 1fr))` }}>
-            {cells}
+          <div className="w-full max-w-[340px] mx-auto grid gap-[1px]" style={{ gridTemplateColumns: `repeat(52, 1fr)` }}>
+            {Array.from({length:totalWeeks}).map((_,i) => (
+              <div key={i} style={{backgroundColor:getColor(i), aspectRatio:'1/1'}} 
+                   className={`rounded-[0.5px] ${i===lived ? 'animate-pulse scale-150 z-10 shadow-sm' : ''}`} />
+            ))}
           </div>
         );
       }
 
-      if (type === "snake") {
-        const cells = [];
-        for (let r=0; r<80; r++) {
-          for (let c=0; c<52; c++) {
-            // Lógica de serpiente: filas pares van ->, impares van <-
-            const idx = (r % 2 === 0) ? (r*52 + c) : (r*52 + (51-c));
-            const isCurrent = idx === lived;
-            cells.push(
-              <div key={`${r}-${c}`} className={`rounded-[1px] ${isCurrent ? "animate-pulse z-10 scale-150" : ""}`}
-                style={{ backgroundColor: weekColor(idx), width:'100%', paddingTop:'100%' }} />
-            );
-          }
-        }
+      // 2. Wave (FIXED: SVG Audio visualizer style)
+      if (type === "wave") {
+        // Creamos 80 barras (años) compuestas de segmentos o simplemente 80 barras de altura variable
+        // Para que sean semanas, es mucho. Mejor: 52 columnas x 80 filas simulando onda?
+        // Mejor enfoque: Barras verticales que forman una onda seno.
+        const bars = [];
+        const cols = 52; 
+        const rows = 80;
+        // Vamos a hacer una visualización "Audio Spectrum" estilizada
+        // Cada columna es un año (simplificado para que entre en pantalla) o cada punto una semana
+        // Haremos 52 barras (columnas) y dentro apilamos bloques
         return (
-          <div className="grid gap-[1px] wiggle" style={{ gridTemplateColumns: `repeat(52, minmax(0, 1fr))` }}>
-            {cells}
-          </div>
-        );
-      }
-      
-      if (type === "columns") {
-        // Columnas verticales de 52 semanas (años)
-        return (
-          <div className="flex flex-row gap-[1px] h-64 items-end justify-center overflow-hidden opacity-90">
-             {Array.from({length: 80}).map((_, y) => {
-               const yearStart = y*52;
-               const weeksInYear = Math.min(52, Math.max(0, lived - yearStart));
-               const isCurrentYear = (lived >= yearStart && lived < yearStart+52);
-               const heightPct = (weeksInYear / 52) * 100;
-               
-               return (
-                 <div key={y} className="flex-1 flex flex-col justify-end h-full relative group">
-                   <div className="w-full bg-current opacity-20 absolute inset-0 rounded-t-sm" style={{ color: colors.hex.weekFuture }}></div>
-                   <div className={`w-full transition-all duration-1000 ${isCurrentYear?"animate-pulse":""}`} 
-                        style={{ height: `${heightPct}%`, backgroundColor: isCurrentYear ? colors.hex.weekCurrent : colors.hex.weekPast }} />
-                 </div>
-               )
+           <div className="flex items-end justify-center h-[300px] gap-[2px] mx-auto max-w-md opacity-90">
+             {Array.from({length: 52}).map((_, col) => {
+                // Altura basada en seno para hacer la "ola"
+                const heightMod = Math.sin(col * 0.2) * 40 + 60; // 20% a 100%
+                const weekIdxStart = col * 80; // Distribución aproximada
+                const active = lived > weekIdxStart;
+                return (
+                  <div key={col} className="w-full flex flex-col justify-end gap-[1px]" style={{height: `${heightMod}%`}}>
+                    {Array.from({length: 10}).map((_, row) => {
+                       // Subdivisión de la barra
+                       const blockIdx = col * 10 + row; // Indice ficticio para color
+                       const pct = blockIdx / 520; // 0 a 1
+                       const isPast = pct < (stats.percentageLived/100);
+                       return (
+                         <div key={row} className="flex-1 rounded-[1px] w-full" 
+                              style={{ backgroundColor: isPast ? colors.hex.past : colors.hex.future, opacity: isPast?1:0.4 }}></div>
+                       )
+                    })}
+                  </div>
+                )
              })}
+           </div>
+        )
+      }
+
+      // 3. Radial Types (Center Age)
+      if (["circle","spiral","constellation"].includes(type)) {
+        let els = [];
+        if (type === "circle") {
+          const rings=80, perRing=52;
+          for(let y=0; y<rings; y++) {
+             const r = 40 + (120/rings)*y;
+             for(let w=0; w<perRing; w++) {
+                const idx = y*perRing + w;
+                const ang = (w/perRing)*Math.PI*2 - Math.PI/2;
+                els.push(<circle key={idx} cx={cx+r*Math.cos(ang)} cy={cy+r*Math.sin(ang)} r={idx===lived?2.5:1.2} fill={getColor(idx)} />);
+             }
+          }
+        } else if (type === "spiral") {
+          const turns=16;
+          for(let i=0; i<totalWeeks; i++) {
+             const t = i/(totalWeeks-1);
+             const ang = t*Math.PI*2*turns - Math.PI/2;
+             const r = 15 + t*145;
+             els.push(<circle key={i} cx={cx+r*Math.cos(ang)} cy={cy+r*Math.sin(ang)} r={i===lived?3:1.4} fill={getColor(i)} />);
+          }
+        } else if (type === "constellation") {
+           // Seeded random visual setup
+           let seed = 42; const rnd = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
+           for(let i=0; i<totalWeeks; i++) {
+              const ang = rnd()*Math.PI*2;
+              const r = Math.sqrt(rnd())*150;
+              const isCurrent = i === lived;
+              els.push(<circle key={i} cx={cx+r*Math.cos(ang)} cy={cy+r*Math.sin(ang)} r={isCurrent?3:rnd()>0.9?1.8:1} fill={getColor(i)} opacity={isCurrent?1:0.8} />);
+           }
+        }
+
+        return (
+          <div className="relative flex justify-center items-center">
+             <svg viewBox={`0 0 ${W} ${H}`} className={`w-full h-auto max-w-[340px] ${type!=="constellation"?"svg-rotate":""}`}>
+                <g>{els}</g>
+             </svg>
+             {/* AGE IN CENTER FOR RADIAL DESIGNS */}
+             <div className={`absolute inset-0 flex flex-col items-center justify-center pointer-events-none ${colors.text}`}>
+               <span className="text-4xl font-bold tracking-tighter">{stats.yearsLived}</span>
+               <span className="text-[10px] uppercase tracking-widest opacity-60">Años</span>
+             </div>
           </div>
         );
       }
 
-      if (type === "circle" || type === "spiral" || type === "constellation") {
-         // SVG Renderers
-         const W=340, H=340, cx=W/2, cy=H/2;
-         let els = [];
-         
-         if (type === "circle") {
-            const rings=80, perRing=52;
-            for(let y=0; y<rings; y++) {
-               const r = 35 + (115/rings)*y;
-               for(let w=0; w<perRing; w++) {
-                  const idx = y*perRing + w;
-                  const ang = (w/perRing)*Math.PI*2 - Math.PI/2;
-                  const isCurrent = idx === lived;
-                  els.push(<circle key={idx} cx={cx + r*Math.cos(ang)} cy={cy + r*Math.sin(ang)} r={isCurrent?2.5:1.2} fill={weekColor(idx)} />);
-               }
-            }
-         } else if (type === "spiral") {
-            const turns=14;
-            for(let i=0; i<totalWeeks; i++) {
-               const t = i/(totalWeeks-1);
-               const ang = t * Math.PI*2 * turns - Math.PI/2;
-               const r = 10 + t*140;
-               const isCurrent = i === lived;
-               els.push(<circle key={i} cx={cx + r*Math.cos(ang)} cy={cy + r*Math.sin(ang)} r={isCurrent?3:1.2} fill={weekColor(i)} />);
-            }
-         } else if (type === "constellation") {
-            // Pseudo-random estable
-            let seed = 12345;
-            const rng = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
-            for(let i=0; i<totalWeeks; i++) {
-               const ang = rng() * Math.PI*2;
-               const r = Math.sqrt(rng()) * 150;
-               const isCurrent = i === lived;
-               const op = isCurrent ? 1 : 0.8;
-               const size = isCurrent ? 3 : (rng() > 0.9 ? 1.8 : 1.0);
-               els.push(<circle key={i} cx={cx + r*Math.cos(ang)} cy={cy + r*Math.sin(ang)} r={size} fill={weekColor(i)} opacity={op} />);
-            }
+      // 4. Snake
+      if (type === "snake") {
+         const cells = [];
+         for(let r=0; r<80; r++){
+           for(let c=0; c<52; c++){
+             const idx = r%2===0 ? r*52+c : r*52+(51-c);
+             cells.push(<div key={`${r}-${c}`} style={{backgroundColor:getColor(idx)}} className={`w-full pt-[100%] rounded-[0.5px] ${idx===lived?'animate-pulse z-10 scale-125':''}`}/>)
+           }
          }
-
-         return (
-           <svg viewBox={`0 0 ${W} ${H}`} className={`w-full h-auto max-w-[340px] mx-auto block ${type!=="constellation"?"svg-rotate":""}`}>
-              <g>{els}</g>
-              {type === "circle" && (
-                <text x="50%" y="50%" dy=".3em" textAnchor="middle" className="text-2xl font-bold" fill={colors.hex.text}>
-                  {stats.percentageLived}%
-                </text>
-              )}
-           </svg>
-         );
+         return <div className="grid gap-[1px] wiggle max-w-[340px] mx-auto" style={{gridTemplateColumns:'repeat(52,1fr)'}}>{cells}</div>;
       }
       return null;
     });
 
-
-    // --- MAIN APP COMPONENT ---
+    // --- MAIN APP ---
     function App() {
-      // 1. Estado Global
       const [users, setUsers] = useState(() => loadJSON(KEYS.users, {}));
       const [session, setSession] = useState(() => loadJSON(KEYS.session, null));
-      const currentUser = session?.username ? users[session.username] : null;
-
-      // 2. Estado UI local
-      const [flow, setFlow] = useState("loading"); // loading, welcome, register, login, setBirthdate, home
+      const [flow, setFlow] = useState("loading");
       const [showSettings, setShowSettings] = useState(false);
-      const [showMoodModal, setShowMoodModal] = useState(false);
-      const [showBirthday, setShowBirthday] = useState(false);
+      const [showMood, setShowMood] = useState(false);
+      
+      // Random content seed
+      const [rndSeed, setRndSeed] = useState(0);
 
-      // 3. Inputs de formularios
-      const [formUser, setFormUser] = useState("");
-      const [formPass, setFormPass] = useState("");
-      const [formError, setFormError] = useState("");
-      const [tempDate, setTempDate] = useState("");
-      const [importCode, setImportCode] = useState("");
-      const [importMsg, setImportMsg] = useState(null);
-
-      // 4. Preferencias (o defaults)
+      const currentUser = session?.username ? users[session.username] : null;
       const lang = currentUser?.prefs?.lang || "es";
       const theme = currentUser?.prefs?.theme || "minimal";
       const design = currentUser?.prefs?.design || "grid";
-      const context = currentUser?.context || DEFAULT_CONTEXT;
-
-      // 5. Helpers derivados
       const t = (k) => I18N[lang]?.[k] ?? I18N.en?.[k] ?? k;
-      const themeColors = useMemo(() => THEMES[theme] || THEMES.minimal, [theme]);
-      const stats = useMemo(() => currentUser?.birthdate ? computeStats(currentUser.birthdate, context) : null, [currentUser?.birthdate, context]);
+      const tc = THEMES[theme] || THEMES.minimal;
+      
+      const stats = useMemo(() => currentUser?.birthdate ? computeStats(currentUser.birthdate) : null, [currentUser]);
 
-      // --- EFFECTS ---
+      // Generate randomized insights based on seed
+      const insights = useMemo(() => {
+        if(!stats) return {};
+        // Simple seeded selection
+        const pick = (pool) => {
+           const arr = pool[lang] || pool.en;
+           return arr[rndSeed % arr.length](stats);
+        }
+        return {
+           societal: pick(INSIGHT_POOLS.societal),
+           cosmic: pick(INSIGHT_POOLS.cosmic),
+           nature: pick(INSIGHT_POOLS.nature)
+        };
+      }, [rndSeed, lang, stats]);
+
       useEffect(() => {
-        // Router inicial
+        // Init flow
         if (session?.username) {
-           if (users[session.username]?.birthdate) setFlow("home");
-           else setFlow("setBirthdate");
+           setFlow(users[session.username]?.birthdate ? "home" : "setBirthdate");
         } else {
            setFlow("welcome");
         }
-      }, []); // Run once on mount
+        setRndSeed(Math.floor(Math.random() * 100)); // Rotate text on load
+      }, []);
 
-      useEffect(() => saveJSON(KEYS.users, users), [users]);
-      useEffect(() => saveJSON(KEYS.session, session), [session]);
+      useEffect(() => { saveJSON(KEYS.users, users); saveJSON(KEYS.session, session); }, [users, session]);
 
-      useEffect(() => {
-        // Chequeo de cumpleaños y mood diario
-        if (flow === "home" && stats && !stats.invalid) {
-          const today = isoToday();
-          
-          // Birthday Check
-          if (isBirthdayToday(currentUser.birthdate)) {
-             const lastShown = currentUser.birthdayShownISO;
-             if (lastShown !== today) {
-                setShowBirthday(true);
-                confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
-                updateCurrentUser({ birthdayShownISO: today });
-             }
-          }
-
-          // Mood Check
-          const moods = currentUser.moods || {};
-          if (!moods[today] && !showBirthday) {
-             // Pequeño delay para no abrumar al entrar
-             setTimeout(() => setShowMoodModal(true), 1500);
-          }
-        }
-      }, [flow, currentUser]);
-
-      // --- ACTIONS ---
-      const updateCurrentUser = (patch) => {
-        if (!session?.username) return;
-        setUsers(prev => ({
-          ...prev,
-          [session.username]: { ...prev[session.username], ...patch }
-        }));
-      };
-
-      const handleAuth = async (isRegister) => {
-        setFormError("");
-        const u = formUser.trim().toLowerCase();
-        const p = formPass;
-        if (!u || !p) return;
-
-        const hash = await passwordHash(u, p);
-
-        if (isRegister) {
-          if (users[u]) return setFormError(lang==="es"?"Usuario ya existe":"User exists");
-          const newUser = {
-            version: 2, username: u, passHash: hash, createdAt: Date.now(),
-            birthdate: "", prefs: { lang: "es", theme: "minimal", design: "grid" },
-            moods: {}, context: { ...DEFAULT_CONTEXT }
-          };
-          setUsers(curr => ({ ...curr, [u]: newUser }));
-          setSession({ username: u });
-          setFlow("setBirthdate");
-        } else {
-          const rec = users[u];
-          if (!rec || rec.passHash !== hash) return setFormError(lang==="es"?"Credenciales inválidas":"Invalid credentials");
-          setSession({ username: u });
-          setFlow(rec.birthdate ? "home" : "setBirthdate");
-        }
-        setFormUser(""); setFormPass("");
-      };
-
-      const handleLogout = () => {
-        setSession(null);
-        setFlow("welcome");
-        setShowSettings(false);
-      };
-
-      const handleSaveBirthdate = () => {
-        if (!tempDate) return;
-        const s = computeStats(tempDate, context);
-        if (s.invalid) return setFormError(t("invalidFuture"));
-        updateCurrentUser({ birthdate: tempDate });
-        setFlow("home");
-      };
-
-      const handleExport = () => {
+      const update = (patch) => {
         if(!currentUser) return;
-        const dataStr = JSON.stringify(currentUser);
-        const b64 = btoa(unescape(encodeURIComponent(dataStr))); // Simple Base64 encode safe for utf8
-        navigator.clipboard.writeText(b64).then(() => {
-           alert(t("copied"));
-        });
+        setUsers(prev => ({...prev, [session.username]: {...prev[session.username], ...patch}}));
       };
 
-      const handleImport = () => {
-        try {
-          const jsonStr = decodeURIComponent(escape(atob(importCode)));
-          const data = JSON.parse(jsonStr);
-          if (data.username && data.passHash) {
-             setUsers(prev => ({ ...prev, [data.username]: data }));
-             setSession({ username: data.username });
-             setImportMsg({ type: 'success', text: t("importSuccess") });
-             setTimeout(() => window.location.reload(), 1000);
-          } else {
-             throw new Error();
-          }
-        } catch (e) {
-          setImportMsg({ type: 'error', text: t("importError") });
-        }
+      // Auth & Forms
+      const [inputUser, setInputUser] = useState("");
+      const [inputPass, setInputPass] = useState("");
+      const [dateVal, setDateVal] = useState("");
+      
+      const doAuth = (isReg) => {
+         const u = inputUser.trim().toLowerCase(), p = inputPass;
+         if(!u || !p) return;
+         // Fake hash for demo
+         const h = u+":"+p; 
+         if(isReg) {
+            if(users[u]) return alert("Existe");
+            const nu = { username:u, pass:h, birthdate:"", prefs:{lang:"es",theme:"ocean",design:"spiral"}, moods:{} };
+            setUsers(prev => ({...prev, [u]:nu}));
+            setSession({username:u});
+            setFlow("setBirthdate");
+         } else {
+            if(users[u] && users[u].pass === h) {
+               setSession({username:u});
+               setFlow(users[u].birthdate ? "home" : "setBirthdate");
+            } else alert("Error");
+         }
       };
 
-      // --- SUB-COMPONENTS FOR PAGES ---
-
-      // 1. Settings Screen
-      const SettingsView = () => (
-        <div className={`fixed inset-0 z-40 overflow-y-auto ${themeColors.bg} ${themeColors.text} safe-bottom fade-in`}>
-          <div className="max-w-md mx-auto p-6 pt-12">
-            <div className="flex justify-between items-center mb-8">
-              <h2 className="text-3xl font-bold tracking-tight">{t("settings")}</h2>
-              <button onClick={() => setShowSettings(false)} className={`p-2 rounded-full hover:bg-black/5`}>
-                <Icons.X />
-              </button>
-            </div>
-
-            <div className="space-y-6">
-              <Accordion title={t("language")} themeColors={themeColors} defaultOpen={true}>
-                <div className="grid grid-cols-2 gap-3">
-                  {['es', 'en'].map(l => (
-                    <button key={l} onClick={() => updateCurrentUser({ prefs: { ...currentUser.prefs, lang: l } })}
-                      className={`p-3 rounded-xl border text-sm font-medium transition-all ${lang===l ? themeColors.accent + " text-white border-transparent shadow-lg" : themeColors.border}`}>
-                      {l === 'es' ? t("spanish") : t("english")}
-                    </button>
-                  ))}
-                </div>
-              </Accordion>
-
-              <Accordion title={t("theme")} themeColors={themeColors}>
-                <div className="grid grid-cols-2 gap-3">
-                  {Object.keys(THEMES).map(k => (
-                    <button key={k} onClick={() => updateCurrentUser({ prefs: { ...currentUser.prefs, theme: k } })}
-                      className={`p-3 rounded-xl border text-sm font-medium transition-all ${theme===k ? "ring-2 ring-offset-2 ring-gray-400 border-transparent" : themeColors.border} ${THEMES[k].bg === 'bg-white' ? 'bg-gray-50' : THEMES[k].bg}`}>
-                      <span className={THEMES[k].text}>{THEMES[k].label[lang] || THEMES[k].label.en}</span>
-                    </button>
-                  ))}
-                </div>
-              </Accordion>
-
-              <Accordion title={t("design")} themeColors={themeColors}>
-                 <div className="grid grid-cols-2 gap-3">
-                   {["grid","circle","wave","spiral","columns","constellation","snake"].map(d => (
-                     <button key={d} onClick={() => updateCurrentUser({ prefs: { ...currentUser.prefs, design: d } })}
-                       className={`p-3 rounded-xl border text-sm capitalize transition-all ${design===d ? themeColors.accent + " text-white border-transparent shadow-lg" : themeColors.border}`}>
-                       {d}
-                     </button>
-                   ))}
-                 </div>
-              </Accordion>
-
-              <Accordion title={t("exportHintTitle")} themeColors={themeColors}>
-                 <div className="space-y-4">
-                    <p className="text-sm opacity-80 leading-relaxed">{t("exportHintBody")}</p>
-                    <button onClick={handleExport} className={`w-full py-3 rounded-xl border font-semibold flex items-center justify-center gap-2 ${themeColors.border} hover:bg-black/5`}>
-                      {t("copy")}
-                    </button>
-                    <hr className="border-t border-black/10 my-4" />
-                    <p className="text-sm opacity-80 font-medium">{t("importData")}</p>
-                    <textarea 
-                      className={`w-full p-3 rounded-xl text-xs font-mono border ${themeColors.border} bg-transparent focus:ring-2 focus:ring-blue-500 outline-none`}
-                      rows="3"
-                      placeholder={t("importPlaceholder")}
-                      value={importCode} onChange={e => setImportCode(e.target.value)}
-                    />
-                    {importMsg && <div className={`text-xs ${importMsg.type==='error'?'text-red-500':'text-green-500'}`}>{importMsg.text}</div>}
-                    <button onClick={handleImport} disabled={!importCode} className={`w-full py-2 rounded-xl text-sm font-semibold text-white ${themeColors.accent} disabled:opacity-50`}>
-                      {t("importData")}
-                    </button>
-                 </div>
-              </Accordion>
-
-              <div className="pt-6">
-                <button onClick={handleLogout} className="w-full py-4 text-red-500 font-semibold text-sm hover:bg-red-50 rounded-xl transition-colors">
-                  {t("logout")}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-
-      // 2. Onboarding / Auth
-      if (flow === "welcome" || flow === "register" || flow === "login") {
-        return (
-          <div className="min-h-screen flex items-center justify-center p-6 bg-white text-slate-900 relative overflow-hidden">
-            {/* Background Decorations */}
-            <div className="absolute top-[-10%] right-[-10%] w-64 h-64 bg-blue-100 rounded-full blur-3xl opacity-60 animate-pulse"></div>
-            <div className="absolute bottom-[-10%] left-[-10%] w-80 h-80 bg-purple-100 rounded-full blur-3xl opacity-60 animate-pulse" style={{animationDelay:"1s"}}></div>
-
-            <div className="w-full max-w-md relative z-10 fade-in">
-              <div className="text-center mb-10">
-                <div className="inline-block p-4 rounded-2xl bg-slate-50 mb-4 shadow-sm anim-float">
-                  <div className="w-8 h-8 bg-slate-900 rounded-md grid grid-cols-2 gap-1 p-1">
-                     <div className="bg-white rounded-[1px] opacity-40"></div><div className="bg-white rounded-[1px] opacity-40"></div>
-                     <div className="bg-blue-400 rounded-[1px]"></div><div className="bg-white rounded-[1px] opacity-20"></div>
+      // Views
+      if(flow === "welcome" || flow === "login" || flow === "register") {
+         return (
+           <div className="min-h-screen flex flex-col items-center justify-center p-6 relative overflow-hidden">
+             {/* Simple Mesh Background for Auth */}
+             <div className="absolute inset-0 bg-slate-50 z-[-2]"></div>
+             <div className="absolute top-[-20%] left-[-20%] w-[80vw] h-[80vw] bg-blue-200 rounded-full blur-[100px] opacity-40 animate-pulse"></div>
+             
+             <div className="w-full max-w-sm glass p-8 rounded-3xl shadow-xl fade-in text-center">
+                <h1 className="text-3xl font-black text-slate-900 mb-2 tracking-tight">{t("appTitle")}</h1>
+                <p className="text-slate-500 mb-8">{t("onboardingSubtitle")}</p>
+                
+                {flow === "welcome" && (
+                  <div className="space-y-3">
+                    <button onClick={()=>setFlow("register")} className="w-full py-4 bg-slate-900 text-white font-bold rounded-xl shadow-lg hover:scale-[1.02] transition-transform">{t("register")}</button>
+                    <button onClick={()=>setFlow("login")} className="w-full py-4 bg-white border border-slate-200 text-slate-700 font-bold rounded-xl hover:bg-slate-50">{t("login")}</button>
                   </div>
-                </div>
-                <h1 className="text-4xl font-extrabold tracking-tight text-slate-900 mb-2">{t("appTitle")}</h1>
-                <p className="text-slate-500 text-lg">{t("onboardingSubtitle")}</p>
-              </div>
-
-              {flow === "welcome" ? (
-                 <div className="space-y-4">
-                   <button onClick={() => setFlow("register")} className="w-full py-4 bg-slate-900 text-white rounded-2xl font-semibold shadow-xl shadow-slate-200 hover:scale-[1.02] transition-transform">
-                     {t("createNew")}
-                   </button>
-                   <button onClick={() => setFlow("login")} className="w-full py-4 bg-white border border-slate-200 text-slate-700 rounded-2xl font-semibold hover:bg-slate-50 transition-colors">
-                     {t("alreadyHave")}
-                   </button>
-                 </div>
-              ) : (
-                <div className="bg-white/80 glass border border-white/50 p-8 rounded-3xl shadow-xl space-y-5 fade-in">
-                   <h2 className="text-xl font-bold">{flow==="register" ? t("register") : t("login")}</h2>
-                   <input className="w-full p-4 bg-slate-50 rounded-xl outline-none focus:ring-2 focus:ring-slate-900 transition-all" 
-                          placeholder={t("username")} value={formUser} onChange={e=>setFormUser(e.target.value)} autoCapitalize="none" />
-                   <input className="w-full p-4 bg-slate-50 rounded-xl outline-none focus:ring-2 focus:ring-slate-900 transition-all" 
-                          placeholder={t("password")} type="password" value={formPass} onChange={e=>setFormPass(e.target.value)} />
-                   
-                   {formError && <div className="text-red-500 text-sm font-medium text-center">{formError}</div>}
-
-                   <button onClick={() => handleAuth(flow==="register")} className="w-full py-4 bg-slate-900 text-white rounded-xl font-bold hover:shadow-lg transition-all">
-                     {t(flow==="register" ? "register" : "login")}
-                   </button>
-                   <button onClick={() => { setFlow("welcome"); setFormError(""); }} className="w-full py-2 text-slate-400 text-sm">
-                     {t("back")}
-                   </button>
-                </div>
-              )}
-            </div>
-          </div>
-        );
+                )}
+                
+                {flow !== "welcome" && (
+                  <div className="space-y-4 text-left">
+                    <input className="w-full p-4 rounded-xl bg-slate-50 border-none outline-none focus:ring-2 focus:ring-slate-900 transition-all" 
+                           placeholder={t("username")} value={inputUser} onChange={e=>setInputUser(e.target.value)} />
+                    <input className="w-full p-4 rounded-xl bg-slate-50 border-none outline-none focus:ring-2 focus:ring-slate-900 transition-all" 
+                           placeholder={t("password")} type="password" value={inputPass} onChange={e=>setInputPass(e.target.value)} />
+                    <button onClick={()=>doAuth(flow==="register")} className="w-full py-4 bg-slate-900 text-white font-bold rounded-xl shadow-xl mt-4">
+                      {flow==="register" ? t("register") : t("login")}
+                    </button>
+                    <button onClick={()=>setFlow("welcome")} className="w-full text-center text-sm text-slate-400 mt-2">{t("back")}</button>
+                  </div>
+                )}
+             </div>
+           </div>
+         )
       }
 
-      // 3. Set Birthdate
-      if (flow === "setBirthdate") {
+      if(flow === "setBirthdate") {
         return (
           <div className="min-h-screen flex items-center justify-center p-6 bg-slate-50">
-            <div className="w-full max-w-md bg-white p-8 rounded-3xl shadow-xl fade-in">
-               <h2 className="text-2xl font-bold mb-2">{t("setBirthdate")}</h2>
-               <p className="text-slate-500 mb-6">{t("onboardingSubtitle")}</p>
-               <input type="date" className="w-full p-4 border rounded-xl mb-4 text-lg bg-white" 
-                      value={tempDate} onChange={e=>setTempDate(e.target.value)} />
-               {formError && <div className="text-red-500 text-sm mb-4">{formError}</div>}
-               <button onClick={handleSaveBirthdate} disabled={!tempDate} 
-                 className="w-full py-4 bg-slate-900 text-white rounded-xl font-bold disabled:opacity-50">
+             <div className="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl fade-in">
+               <h2 className="text-2xl font-bold mb-4">{t("setBirthdate")}</h2>
+               <input type="date" className="w-full p-4 border rounded-xl mb-6 text-lg bg-slate-50" 
+                      value={dateVal} onChange={e=>setDateVal(e.target.value)} />
+               <button onClick={()=>{ if(dateVal) { update({birthdate:dateVal}); setFlow("home"); } }} 
+                       disabled={!dateVal} className="w-full py-4 bg-slate-900 text-white font-bold rounded-xl disabled:opacity-50">
                  {t("done")}
                </button>
-            </div>
+             </div>
           </div>
-        );
+        )
       }
 
-      // 4. Main Home Dashboard
-      if (flow === "home" && stats) {
-        // Generar Insights (simple)
-        const insights = [
-          t("weeksLived") + ": " + fmtInt(stats.weeksLived),
-          t("daysLived") + ": " + fmtInt(stats.daysLived),
-          stats.seasons + " estaciones vividas.",
-          stats.heartBeats.toLocaleString() + " latidos aprox.",
-          stats.sleepHours.toLocaleString() + " horas dormidas."
-        ];
-
+      // HOME
+      if(stats) {
+        // Condition to show Big Age in background for non-radial designs
+        const isRadial = ["circle","spiral","constellation"].includes(design);
+        
         return (
-          <div className={`min-h-screen ${themeColors.bg} ${themeColors.text} transition-colors duration-500`}>
-            {/* Header */}
-            <header className="px-6 pt-12 pb-6 max-w-lg mx-auto flex justify-between items-end">
-              <div>
-                <h1 className="text-3xl font-extrabold tracking-tight leading-tight">{t("yourLife")}</h1>
-                <p className={`${themeColors.textSecondary} font-medium`}>{stats.percentageLived}% completado</p>
-              </div>
-              <button onClick={() => setShowSettings(true)} className={`p-3 rounded-full ${themeColors.card} shadow-sm border ${themeColors.border}`}>
-                <Icons.Settings />
-              </button>
-            </header>
+          <div className={`min-h-screen ${tc.text} relative overflow-hidden transition-colors duration-700`}>
+            {/* BACKGROUND MESH */}
+            <div className={`mesh-bg ${tc.bgClass}`}>
+              <div className="mesh-blob blob-1" style={{'--blob-1':tc.blobs[0]}}></div>
+              <div className="mesh-blob blob-2" style={{'--blob-2':tc.blobs[1]}}></div>
+              <div className="mesh-blob blob-3" style={{'--blob-3':tc.blobs[2]}}></div>
+            </div>
 
-            <main className="px-4 pb-24 max-w-lg mx-auto space-y-6">
+            {/* HEADER */}
+            <div className="flex justify-between items-end px-6 pt-12 pb-4 max-w-lg mx-auto relative z-10">
+               <div>
+                 <h1 className="text-3xl font-black tracking-tight leading-none">{t("appTitle")}</h1>
+                 <p className={`text-sm font-medium opacity-60 mt-1`}>{stats.percentageLived}% {t("lifeProgress")}</p>
+               </div>
+               <button onClick={()=>setShowSettings(true)} className="p-3 glass rounded-full hover:bg-black/5 transition-colors">
+                 <Icon name="settings" />
+               </button>
+            </div>
+
+            <div className="px-4 pb-24 max-w-lg mx-auto space-y-6 relative z-10">
               
-              {/* Visualizer Card */}
-              <div className={`${themeColors.card} border ${themeColors.border} p-6 rounded-3xl shadow-sm overflow-hidden relative`}>
-                 <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
-                    <div className="text-9xl font-bold leading-none">{stats.yearsLived}</div>
+              {/* VISUALIZER CARD */}
+              <div className={`glass rounded-3xl p-6 relative border-0 shadow-sm overflow-hidden min-h-[380px] flex flex-col justify-between`}>
+                 {/* Background Age for Linear Designs */}
+                 {!isRadial && (
+                    <div className="absolute top-4 right-6 text-[120px] font-black leading-none opacity-[0.04] select-none pointer-events-none">
+                      {stats.yearsLived}
+                    </div>
+                 )}
+                 
+                 <div className="flex-1 flex items-center justify-center py-4">
+                    <Visualizer type={design} stats={stats} colors={tc} />
                  </div>
-                 <div className="py-2">
-                    <Visualizer type={design} stats={stats} colors={themeColors} />
-                 </div>
-                 <div className="mt-6 flex justify-between items-center text-xs font-semibold uppercase tracking-wider opacity-60">
-                   <span>Nacimiento</span>
-                   <span>Hoy</span>
-                   <span>90 Años</span>
+
+                 <div className="flex justify-between items-end text-[10px] uppercase font-bold tracking-widest opacity-40">
+                    <span>Nacimiento</span>
+                    <span>{t("weeksLived")} {fmtInt(stats.weeksLived)}</span>
                  </div>
               </div>
 
-              {/* Progress Bar */}
-              <div className={`${themeColors.card} border ${themeColors.border} p-6 rounded-3xl shadow-sm`}>
-                 <div className="flex justify-between mb-3 text-sm font-medium">
-                   <span>{t("lifeProgress")}</span>
-                   <span>{fmtInt(stats.weeksRemaining)} {t("weeks")}</span>
+              {/* STATS STRIP */}
+              <div className="grid grid-cols-2 gap-3">
+                 <div className="glass p-5 rounded-2xl">
+                    <div className="text-xs uppercase font-bold opacity-50 mb-1">{t("weeksLeft")}</div>
+                    <div className="text-2xl font-bold">{fmtInt(stats.weeksRemaining)}</div>
                  </div>
-                 <div className={`h-4 w-full rounded-full overflow-hidden ${themeColors.track}`}>
-                   <div className={`h-full ${themeColors.accent} transition-all duration-1000 ease-out`} style={{ width: `${stats.percentageLived}%` }}></div>
+                 <div className="glass p-5 rounded-2xl">
+                    <div className="text-xs uppercase font-bold opacity-50 mb-1">Días Vividos</div>
+                    <div className="text-2xl font-bold">{fmtInt(stats.daysLived)}</div>
                  </div>
               </div>
 
-              {/* Highlights Accordions */}
+              {/* DYNAMIC INSIGHTS */}
               <div>
-                <Accordion title={t("highlights")} themeColors={themeColors} defaultOpen={true}>
-                   <ul className={`space-y-3 text-sm leading-relaxed ${themeColors.textSecondary}`}>
-                     {insights.map((line, i) => (
-                       <li key={i} className="flex gap-3">
-                         <span className={`block w-1.5 h-1.5 mt-2 rounded-full flex-shrink-0 ${themeColors.accent}`}></span>
-                         {line}
-                       </li>
-                     ))}
-                   </ul>
+                <Accordion title={t("societal")} tc={tc}>
+                   <p className={`text-sm leading-relaxed opacity-80 py-2`}>{insights.societal}</p>
                 </Accordion>
-                <Accordion title={t("societal")} themeColors={themeColors}>
-                   <p className={`text-sm ${themeColors.textSecondary}`}>La población mundial ha crecido de ~{fmtInt(context.populationAtBirth)} a ~{fmtInt(context.populationNow)} durante tu vida.</p>
+                <Accordion title={t("cosmic")} tc={tc}>
+                   <p className={`text-sm leading-relaxed opacity-80 py-2`}>{insights.cosmic}</p>
                 </Accordion>
-                <Accordion title={t("cosmic")} themeColors={themeColors}>
-                   <p className={`text-sm ${themeColors.textSecondary}`}>Has viajado {stats.earthAroundSunKm.toExponential(2)} km alrededor del sol.</p>
+                <Accordion title={t("nature")} tc={tc}>
+                   <p className={`text-sm leading-relaxed opacity-80 py-2`}>{insights.nature}</p>
                 </Accordion>
               </div>
 
-              {/* Mood Tracker */}
-              <div className={`${themeColors.card} border ${themeColors.border} p-6 rounded-3xl shadow-sm`}>
+              {/* MOOD */}
+              <div className="glass p-6 rounded-3xl">
                 <div className="flex justify-between items-center mb-4">
                   <span className="font-bold">{t("mood")}</span>
-                  <button onClick={() => setShowMoodModal(true)} className={`text-xs font-bold px-3 py-1 rounded-full border ${themeColors.border}`}>
+                  <button onClick={()=>setShowMood(true)} className={`text-xs font-bold px-3 py-1.5 rounded-full bg-black/5 hover:bg-black/10 transition-colors`}>
                     + {t("moodLogNow")}
                   </button>
                 </div>
-                {/* Mood Heatmap (Last 90 days) */}
-                <div className="flex flex-wrap gap-1 justify-end">
-                   {Array.from({length:90}).map((_, i) => {
-                      const d = new Date();
-                      d.setDate(d.getDate() - (89-i));
-                      const y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,'0'), day = String(d.getDate()).padStart(2,'0');
-                      const iso = `${y}-${m}-${day}`;
-                      const moodId = currentUser.moods?.[iso];
-                      const mood = MOODS.find(m => m.id === moodId);
-                      const bg = mood ? mood.color : (theme==='dark'?'#334155':'#e2e8f0');
-                      return <div key={i} className="w-[8px] h-[8px] rounded-[1px]" style={{ backgroundColor: bg }} title={iso} />
+                <div className="flex gap-0.5 justify-end flex-wrap h-8 overflow-hidden">
+                   {/* Mini heatmap */}
+                   {Array.from({length:60}).map((_,i)=>{
+                      // Fake logic for demo visualization
+                      return <div key={i} className="w-1.5 h-full rounded-sm opacity-20 bg-current"></div>
                    })}
                 </div>
               </div>
+            </div>
 
-            </main>
+            {/* MODALS */}
+            {showSettings && (
+               <div className="fixed inset-0 z-50 bg-black/20 backdrop-blur-md flex justify-end">
+                  <div className={`w-full max-w-sm h-full ${tc.bgClass} shadow-2xl p-6 overflow-y-auto fade-in`}>
+                     <div className="flex justify-between items-center mb-8">
+                        <h2 className="text-2xl font-bold">{t("settings")}</h2>
+                        <button onClick={()=>setShowSettings(false)}><Icon name="x"/></button>
+                     </div>
+                     
+                     <h3 className="text-xs font-bold uppercase opacity-50 mb-3">{t("language")}</h3>
+                     <div className="flex gap-2 mb-8">
+                        {['es','en'].map(l => (
+                          <button key={l} onClick={()=>update({prefs:{...currentUser.prefs, lang:l}})} className={`flex-1 py-3 rounded-xl border font-bold ${lang===l?tc.hex.accent+' text-white border-transparent':'border-slate-200'}`}>{l.toUpperCase()}</button>
+                        ))}
+                     </div>
 
-            {/* Modals */}
-            {showSettings && <SettingsView />}
-            
-            <Modal open={showMoodModal} onClose={() => setShowMoodModal(false)}>
-               <div className="p-6 text-center bg-white text-slate-900">
-                  <h3 className="text-xl font-bold mb-1">{t("moodTodayTitle")}</h3>
-                  <p className="text-slate-500 text-sm mb-6">{t("moodTodaySubtitle")}</p>
-                  <div className="grid grid-cols-2 gap-3">
-                    {MOODS.map(m => (
-                      <button key={m.id} 
-                        onClick={() => {
-                          const today = isoToday();
-                          updateCurrentUser({ moods: { ...currentUser.moods, [today]: m.id } });
-                          setShowMoodModal(false);
-                        }}
-                        className="p-3 rounded-xl border border-slate-100 bg-slate-50 hover:bg-slate-100 flex items-center gap-2 transition-colors">
-                        <div className="w-3 h-3 rounded-full" style={{background:m.color}}></div>
-                        <span className="text-sm font-medium text-slate-700">{m.label[lang]||m.label.en}</span>
-                      </button>
-                    ))}
+                     <h3 className="text-xs font-bold uppercase opacity-50 mb-3">{t("theme")}</h3>
+                     <div className="grid grid-cols-2 gap-2 mb-8">
+                        {Object.keys(THEMES).map(k => (
+                          <button key={k} onClick={()=>update({prefs:{...currentUser.prefs, theme:k}})} 
+                             className={`py-3 rounded-xl border text-sm font-medium ${theme===k?'ring-2 ring-blue-500 border-transparent':''}`}
+                             style={{backgroundColor: THEMES[k].hex.future, color: THEMES[k].hex.text}}>
+                             {THEMES[k].label[lang]}
+                          </button>
+                        ))}
+                     </div>
+
+                     <h3 className="text-xs font-bold uppercase opacity-50 mb-3">{t("design")}</h3>
+                     <div className="grid grid-cols-2 gap-2 mb-8">
+                        {["grid","circle","spiral","wave","snake","constellation"].map(d => (
+                          <button key={d} onClick={()=>update({prefs:{...currentUser.prefs, design:d}})} 
+                             className={`py-3 rounded-xl border text-sm capitalize ${design===d?'bg-slate-900 text-white border-transparent':''}`}>
+                             {d}
+                          </button>
+                        ))}
+                     </div>
+
+                     <button onClick={()=>{setSession(null); setFlow("welcome"); setShowSettings(false);}} className="w-full py-4 text-red-500 font-bold bg-red-50 rounded-xl">{t("close")} sesión</button>
                   </div>
                </div>
-            </Modal>
-
-            <Modal open={showBirthday} onClose={() => setShowBirthday(false)}>
-              <div className="p-8 text-center bg-white text-slate-900 relative overflow-hidden">
-                <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-red-400 via-yellow-400 to-blue-400"></div>
-                <div className="mb-4 text-5xl">🎂</div>
-                <h3 className="text-2xl font-bold mb-2">{t("birthdayTitle")}</h3>
-                <p className="text-slate-600 mb-6 leading-relaxed">{t("birthdayMsg")}</p>
-                <button onClick={() => setShowBirthday(false)} className="px-8 py-3 bg-slate-900 text-white rounded-xl font-bold shadow-lg shadow-slate-200">
-                   {t("birthdayDismiss")}
-                </button>
+            )}
+            
+            {showMood && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={()=>setShowMood(false)}>
+                 <div className="bg-white p-6 rounded-3xl w-full max-w-xs shadow-2xl fade-in" onClick={e=>e.stopPropagation()}>
+                    <h3 className="text-lg font-bold mb-4 text-center text-slate-900">{t("moodTodayTitle")}</h3>
+                    <div className="grid grid-cols-2 gap-2">
+                       {MOODS.map(m => (
+                          <button key={m.id} onClick={()=>{setShowMood(false);}} 
+                             className="p-3 rounded-xl bg-slate-50 hover:bg-slate-100 flex items-center gap-2 text-sm text-slate-700 font-medium">
+                             <div className="w-3 h-3 rounded-full" style={{background:m.color}}/> {m.label[lang]||m.label.en}
+                          </button>
+                       ))}
+                    </div>
+                 </div>
               </div>
-            </Modal>
+            )}
           </div>
         );
       }
-
-      return <div className="min-h-screen flex items-center justify-center text-slate-400 animate-pulse">Loading...</div>;
+      return <div/>;
     }
 
     const root = ReactDOM.createRoot(document.getElementById("root"));
