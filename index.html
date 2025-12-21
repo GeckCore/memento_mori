@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <meta name="theme-color" content="#0f172a" />
+  <meta name="theme-color" content="#000000" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <title>MEMENTO | Life OS</title>
+  <title>MEMENTO | Life Galaxy</title>
 
   <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
@@ -14,44 +14,41 @@
   
   <script src="https://cdn.tailwindcss.com"></script>
   
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
   
   <style>
-    /* --- OPTIMIZACIONES CORE --- */
-    :root { --glass-border: rgba(255, 255, 255, 0.08); }
+    :root { --glass: rgba(255, 255, 255, 0.05); --glass-border: rgba(255, 255, 255, 0.1); }
     body { 
-      font-family: 'Outfit', sans-serif; 
+      font-family: 'Space Grotesk', sans-serif; 
       margin: 0; padding: 0; 
       background-color: #000; color: #fff;
       overflow-x: hidden; -webkit-tap-highlight-color: transparent;
     }
 
-    /* --- ANIMACIONES --- */
-    @keyframes heartbeat { 0%, 100% { transform: scale(1); } 15% { transform: scale(1.25); } 30% { transform: scale(1); } 45% { transform: scale(1.15); } 60% { transform: scale(1); } }
-    @keyframes scanline { 0% { transform: translateY(-100%); opacity: 0; } 50% { opacity: 0.5; } 100% { transform: translateY(500%); opacity: 0; } }
-    @keyframes pulse-glow { 0%, 100% { box-shadow: 0 0 5px currentColor; opacity: 1; } 50% { box-shadow: 0 0 15px currentColor; opacity: 0.5; } }
-    @keyframes float-blob { 0%, 100% { transform: translate(0,0) scale(1); } 33% { transform: translate(30px, -50px) scale(1.1); } 66% { transform: translate(-20px, 20px) scale(0.9); } }
-    @keyframes spin-slow { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    /* --- ANIMATIONS --- */
+    @keyframes galaxy-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    @keyframes pulse-star { 0%, 100% { opacity: 0.8; transform: scale(1); } 50% { opacity: 0.3; transform: scale(0.8); } }
+    @keyframes float-slow { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-15px); } }
+    @keyframes scan { 0% { top: 0%; opacity: 0; } 50% { opacity: 1; } 100% { top: 100%; opacity: 0; } }
 
-    .anim-heart { animation: heartbeat 1.5s infinite ease-in-out; display: inline-block; }
-    .anim-scan { animation: scanline 4s cubic-bezier(0.4, 0, 0.2, 1) infinite; background: linear-gradient(to bottom, transparent, rgba(255,255,255,0.2), transparent); }
-    .anim-pulse { animation: pulse-glow 2s infinite; }
-    .anim-float { animation: float-blob 20s infinite ease-in-out; }
-    .anim-spin { animation: spin-slow 120s linear infinite; }
+    .anim-galaxy { animation: galaxy-spin 120s linear infinite; }
+    .anim-float { animation: float-slow 8s ease-in-out infinite; }
+    .anim-scan { position: absolute; left:0; right:0; height: 50px; background: linear-gradient(to bottom, transparent, rgba(255,255,255,0.1), transparent); animation: scan 3s linear infinite; pointer-events: none; }
 
-    /* --- UI ELEMENTS --- */
-    .glass {
-      background: rgba(255, 255, 255, 0.03);
-      backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    /* --- UI UTILS --- */
+    .glass-panel {
+      background: var(--glass);
+      backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
       border: 1px solid var(--glass-border);
-      box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.3);
     }
     .hide-scrollbar::-webkit-scrollbar { display: none; }
-    .btn-press:active { transform: scale(0.96); }
     
-    /* Grid Decoration */
-    .grid-marker { position: absolute; font-size: 8px; font-weight: 900; opacity: 0.3; pointer-events: none; }
+    /* Input Date Dark Mode Fix */
+    input[type="date"] { background: transparent; color: white; color-scheme: dark; }
+    
+    .glow-text { text-shadow: 0 0 20px currentColor; }
   </style>
 </head>
 <body>
@@ -59,61 +56,47 @@
 
   <script type="text/babel">
     const { useEffect, useMemo, useState, memo } = React;
-    const STORAGE_KEY = "memento_ultimate_v7";
+    const STORAGE_KEY = "memento_galaxy_v8";
 
-    // --- TEMAS (Más Variedad) ---
+    // --- TEMAS (Configuración de colores robusta) ---
     const THEMES = {
-      neon: { name: "Neon", bg1: "#4f46e5", bg2: "#c026d3", accent: "#22d3ee", text: "text-cyan-400", hex: { past: "#312e81", future: "#1e1b4b", current: "#22d3ee" } },
-      magma: { name: "Magma", bg1: "#ef4444", bg2: "#f59e0b", accent: "#fbbf24", text: "text-orange-400", hex: { past: "#7f1d1d", future: "#450a0a", current: "#fbbf24" } },
-      forest: { name: "Forest", bg1: "#065f46", bg2: "#047857", accent: "#34d399", text: "text-emerald-400", hex: { past: "#064e3b", future: "#022c22", current: "#34d399" } },
-      glacier: { name: "Glacier", bg1: "#0ea5e9", bg2: "#e0f2fe", accent: "#ffffff", text: "text-sky-200", hex: { past: "#0369a1", future: "#0c4a6e", current: "#ffffff" } },
-      royal: { name: "Royal", bg1: "#fbbf24", bg2: "#78350f", accent: "#fbbf24", text: "text-yellow-500", hex: { past: "#92400e", future: "#2a1b0a", current: "#fbbf24" } },
-      hack: { name: "Hacker", bg1: "#000000", bg2: "#10b981", accent: "#22c55e", text: "text-green-500", hex: { past: "#14532d", future: "#022c22", current: "#22c55e" } },
-      vapor: { name: "Vapor", bg1: "#ec4899", bg2: "#8b5cf6", accent: "#22d3ee", text: "text-pink-400", hex: { past: "#831843", future: "#312e81", current: "#22d3ee" } },
-      birthday: { name: "Party", bg1: "#db2777", bg2: "#8b5cf6", accent: "#ffd700", text: "text-yellow-300", hex: { past: "#be185d", future: "#312e81", current: "#ffd700" } }
+      nebula: { name: "Nebula", bg1: "#6366f1", bg2: "#a855f7", accent: "#c084fc", hex: { past: "#312e81", future: "#1e1b4b", current: "#c084fc" } },
+      mars: { name: "Mars", bg1: "#dc2626", bg2: "#991b1b", accent: "#f87171", hex: { past: "#7f1d1d", future: "#450a0a", current: "#fca5a5" } },
+      aurora: { name: "Aurora", bg1: "#10b981", bg2: "#0f766e", accent: "#34d399", hex: { past: "#064e3b", future: "#022c22", current: "#34d399" } },
+      midnight: { name: "Midnight", bg1: "#1e293b", bg2: "#0f172a", accent: "#38bdf8", hex: { past: "#1e293b", future: "#020617", current: "#38bdf8" } },
+      gold: { name: "Lux", bg1: "#d97706", bg2: "#78350f", accent: "#fbbf24", hex: { past: "#92400e", future: "#2a1b0a", current: "#fbbf24" } },
+      birthday: { name: "Party", bg1: "#db2777", bg2: "#7c3aed", accent: "#f472b6", hex: { past: "#be185d", future: "#312e81", current: "#f472b6" } }
     };
 
     const I18N = {
       es: {
-        welcome: "MEMENTO", sub: "Diseña tu tiempo.",
-        setup_name: "¿Tu nombre?", setup_dob: "Nacimiento", btn_start: "Inicializar",
-        weeks_lived: "Semanas vividas", weeks_left: "Restantes",
-        progress: "Progreso Vital", stats: "Biometría Estimada",
-        heart: "Latidos", breath: "Respiraciones", sleep: "Durmiendo", orbit: "Órbitas",
-        global: "Contexto Global", cosmic: "Cosmic",
-        settings: "Sistema", theme: "Tema", design: "Visualizador", lang: "Idioma", reset: "Formatear",
-        bday_title: "¡Feliz Vuelta al Sol,", bday_msg: "Un año más de experiencia. Un año más de vida. Celébralo.",
-        quotes: [
-          "No tenemos poco tiempo, perdemos mucho. - Séneca",
-          "Memento Mori: Recuerda que eres mortal.",
-          "Cada semana es un ladrillo de tu legado.",
-          "El tiempo es el recurso más valioso.",
-          "Vive como si fueras a morir mañana. Aprende como si fueras a vivir siempre."
-        ]
+        welcome: "MEMENTO", sub: "El tiempo es arte.",
+        setup_name: "¿Tu nombre?", setup_dob: "Nacimiento", btn_start: "Inicializar Sistema",
+        weeks_lived: "Vivido", weeks_left: "Futuro",
+        progress: "Progreso Vital", stats: "Biometría",
+        heart: "Latidos", breath: "Aires", sleep: "Sueño", orbit: "Órbitas",
+        global: "Contexto Global", cosmic: "Datos Cósmicos",
+        settings: "Configuración", theme: "Apariencia", design: "Visualización", lang: "Idioma", reset: "Reiniciar",
+        bday_title: "¡Feliz Cumpleaños,", bday_msg: "Una vuelta más al sol completada. El universo celebra tu existencia.",
+        quote: "Memento Mori: Recuerda que has de vivir."
       },
       en: {
-        welcome: "MEMENTO", sub: "Design your time.",
-        setup_name: "Your Name?", setup_dob: "Birthdate", btn_start: "Initialize",
-        weeks_lived: "Weeks lived", weeks_left: "Remaining",
-        progress: "Life Progress", stats: "Est. Biometrics",
-        heart: "Heartbeats", breath: "Breaths", sleep: "Sleeping", orbit: "Orbits",
-        global: "Global Context", cosmic: "Cosmic",
-        settings: "System", theme: "Theme", design: "Visualizer", lang: "Language", reset: "Format",
-        bday_title: "Happy Trip Around Sun,", bday_msg: "One more year of experience. One more year of life. Celebrate it.",
-        quotes: [
-          "We suffer more in imagination than in reality. - Seneca",
-          "Memento Mori: Remember you must die.",
-          "Time is the most valuable resource.",
-          "Live as if you were to die tomorrow.",
-          "The obstacle is the way."
-        ]
+        welcome: "MEMENTO", sub: "Time is art.",
+        setup_name: "Your Name?", setup_dob: "Birthdate", btn_start: "Initialize System",
+        weeks_lived: "Lived", weeks_left: "Future",
+        progress: "Life Progress", stats: "Biometrics",
+        heart: "Heartbeats", breath: "Breaths", sleep: "Sleep", orbit: "Orbits",
+        global: "Global Context", cosmic: "Cosmic Data",
+        settings: "Settings", theme: "Appearance", design: "Visualization", lang: "Language", reset: "Reset",
+        bday_title: "Happy Birthday,", bday_msg: "Another trip around the sun completed. The universe celebrates you.",
+        quote: "Memento Mori: Remember to live."
       }
     };
 
+    // --- UTILS ---
     const fmt = (n) => Math.round(n).toLocaleString();
     const isBirthday = (dob) => {
-      const d = new Date(dob);
-      const n = new Date();
+      const d = new Date(dob); const n = new Date();
       return d.getDate() === n.getDate() && d.getMonth() === n.getMonth();
     };
 
@@ -141,137 +124,120 @@
       };
     }
 
-    // --- VISUALIZADORES OPTIMIZADOS ---
-    const Visualizer = memo(({ type, stats, theme }) => {
+    // --- VISUALIZADORES ---
+
+    // 1. GALAXY SPIRAL (Restaurado y Optimizado)
+    const GalaxyVisualizer = memo(({ stats, theme }) => {
       const { lived, total } = stats;
-      const c1 = theme.hex.past; 
-      const c2 = theme.hex.current; 
-      const c3 = theme.hex.future;
-
-      // 1. GRID ENHANCED (Con marcadores de décadas y escáner)
-      if (type === 'grid') {
-        return (
-          <div className="relative w-full overflow-hidden rounded-lg">
-            <div className="absolute inset-0 anim-scan pointer-events-none z-10"></div>
-            <div className="w-full grid grid-cols-[repeat(52,1fr)] gap-[1.5px]">
-              {Array.from({ length: total }).map((_, i) => {
-                const isDecade = i > 0 && i % 520 === 0; // Cada 10 años
-                const isCurrent = i === lived;
-                return (
-                  <div key={i} className={`aspect-square rounded-[0.5px] transition-colors duration-500 ${isDecade ? 'mb-1' : ''}`}
-                       style={{ 
-                         backgroundColor: i < lived ? c1 : isCurrent ? c2 : c3,
-                         opacity: i < lived ? 0.7 : isCurrent ? 1 : 0.3,
-                         boxShadow: isCurrent ? `0 0 10px ${c2}` : 'none',
-                         zIndex: isCurrent ? 20 : 1
-                       }} />
-                )
-              })}
-            </div>
-            {/* Cursor Pulsante sobre la semana actual */}
-            <div className="absolute z-20 w-3 h-3 border border-white rounded-full -ml-1.5 -mt-1.5 pointer-events-none transition-all duration-1000"
-                 style={{
-                    left: `${(lived % 52) * (100/52)}%`,
-                    top: `${Math.floor(lived / 52) * (100/80)}%`,
-                    boxShadow: `0 0 10px ${c2}, inset 0 0 5px ${c2}`
-                 }} />
-          </div>
-        );
-      }
-
-      // 2. SPIRAL (Matemática pura en SVG)
-      if (type === 'spiral') {
-        const pts = [];
-        const cx=200, cy=200;
-        // Optimizacion MOVIL: Renderizar 1 punto cada 2 semanas para suavidad extrema
-        const step = 2; 
-        const maxPts = total;
-        
-        for(let i=0; i<maxPts; i+=step) {
-          const t = i/maxPts;
-          const r = 10 + (t * 180);
-          const a = t * Math.PI * 2 * 18; // 18 vueltas
-          const x = cx + r*Math.cos(a);
-          const y = cy + r*Math.sin(a);
-          const isCurrent = (i >= lived && i < lived+step);
-          
-          pts.push(
-            <circle key={i} cx={x} cy={y} r={isCurrent ? 4 : 1.5} 
-              fill={i<lived ? c1 : isCurrent ? c2 : c3}
-              className={isCurrent ? "anim-pulse" : ""} 
-            />
-          );
+      const points = useMemo(() => {
+        const arr = [];
+        const cx = 200, cy = 200;
+        // Creamos una galaxia espiral logarítmica
+        for (let i = 0; i < total; i++) {
+           // Distribuir puntos a lo largo de brazos espirales
+           const armOffset = (i % 3) * (Math.PI * 2 / 3); // 3 Brazos
+           const t = i / total; 
+           const dist = 10 + (t * 180); // Radio expandiéndose
+           const angle = (t * Math.PI * 10) + armOffset; // Rotación espiral
+           
+           // Añadir "ruido" aleatorio para naturalidad (pero determinista basado en i)
+           const noise = (Math.sin(i) * 10); 
+           const x = cx + (dist + noise) * Math.cos(angle);
+           const y = cy + (dist + noise) * Math.sin(angle);
+           
+           // Solo renderizamos si es visible o significativo para ahorrar DOM en animaciones complejas?
+           // No, SVG aguanta 4000 nodos si no los animamos individualmente.
+           // La animación será un <g> rotando todo el conjunto.
+           arr.push({ x, y, id: i });
         }
-        return <svg viewBox="0 0 400 400" className="w-full anim-spin">{pts}</svg>;
-      }
+        return arr;
+      }, [total]);
 
-      // 3. STARS (Optimizado: Renderiza por MESES en lugar de semanas)
-      if (type === 'stars') {
-        const stars = useMemo(() => {
-          let seed = 42; 
-          const rnd = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
-          
-          // Renderizamos ~1000 estrellas (meses) en lugar de 4000 (semanas)
-          // Esto mejora el rendimiento un 400% en móviles
-          return Array.from({length: 1040}).map((_, i) => {
-             const weeksRep = i * 4;
-             const x = rnd()*400; 
-             const y = rnd()*400;
-             const isLived = weeksRep < lived;
-             const size = rnd()*1.5 + 0.5;
-             const opacity = isLived ? 0.8 : 0.2;
-             
-             return (
-               <circle key={i} cx={x} cy={y} r={size} 
-                       fill={isLived ? c1 : c3} opacity={opacity} />
-             )
-          });
-        }, [lived, c1, c3]);
-
-        return (
-          <svg viewBox="0 0 400 400" className="w-full">
-            <defs>
-              <radialGradient id="glow">
-                <stop offset="0%" stopColor={c2} stopOpacity="1"/>
-                <stop offset="100%" stopColor={c2} stopOpacity="0"/>
-              </radialGradient>
-            </defs>
-            {stars}
-            {/* Estrella central actual */}
-            <circle cx="200" cy="200" r="10" fill="url(#glow)" className="anim-pulse" />
-            <circle cx="200" cy="200" r="3" fill="#fff" />
-          </svg>
-        );
-      }
-      return null;
+      return (
+        <svg viewBox="0 0 400 400" className="w-full h-auto">
+           {/* Fondo Glow */}
+           <defs>
+             <radialGradient id="centerGlow">
+               <stop offset="0%" stopColor={theme.accent} stopOpacity="0.5"/>
+               <stop offset="100%" stopColor={theme.accent} stopOpacity="0"/>
+             </radialGradient>
+           </defs>
+           <circle cx="200" cy="200" r="60" fill="url(#centerGlow)" />
+           
+           {/* Grupo Rotatorio */}
+           <g className="anim-galaxy" style={{transformOrigin: '200px 200px'}}>
+             {points.map((p) => {
+               const isLived = p.id < lived;
+               const isCurrent = p.id === lived;
+               const color = isLived ? theme.hex.past : isCurrent ? theme.hex.current : theme.hex.future;
+               const opacity = isLived ? 0.8 : 0.3;
+               const r = isCurrent ? 4 : isLived ? 1.5 : 1;
+               
+               return (
+                 <circle key={p.id} cx={p.x} cy={p.y} r={r} fill={color} opacity={opacity} 
+                         className={isCurrent ? "anim-pulse" : ""} />
+               )
+             })}
+           </g>
+           
+           {/* Indicador central */}
+           <circle cx="200" cy="200" r="3" fill="#fff" />
+        </svg>
+      );
     });
 
-    // --- APP CORE ---
+    // 2. GRID PRO (Con décadas)
+    const GridVisualizer = memo(({ stats, theme }) => {
+      const { lived, total } = stats;
+      return (
+        <div className="relative w-full h-full overflow-hidden rounded-xl">
+           <div className="anim-scan"></div>
+           <div className="grid grid-cols-[repeat(52,1fr)] gap-[1px]">
+             {Array.from({length: total}).map((_, i) => {
+               const isDecade = (i+1) % 520 === 0;
+               const isCurrent = i === lived;
+               return (
+                 <div key={i} 
+                      className={`aspect-square rounded-[0.5px] transition-colors duration-300 ${isDecade ? 'mb-1' : ''}`}
+                      style={{
+                        backgroundColor: i < lived ? theme.hex.past : isCurrent ? theme.hex.current : theme.hex.future,
+                        opacity: i < lived ? 0.6 : isCurrent ? 1 : 0.2,
+                        boxShadow: isCurrent ? `0 0 10px ${theme.hex.current}` : 'none'
+                      }} />
+               )
+             })}
+           </div>
+        </div>
+      );
+    });
+
+    // --- APP ---
     function App() {
       const [user, setUser] = useState(() => JSON.parse(localStorage.getItem(STORAGE_KEY)));
       const [settings, setSettings] = useState(false);
-      const [quote, setQuote] = useState("");
       
       const lang = user?.lang || 'es';
       const txt = I18N[lang];
       const stats = useMemo(() => user ? calcStats(user.dob) : null, [user]);
-      
       const bday = user && isBirthday(user.dob);
-      const activeThemeKey = bday ? 'birthday' : (user?.theme || 'neon');
-      const theme = THEMES[activeThemeKey];
+      
+      // Fix Theme Logic: Use user theme unless Birthday (and user hasn't overridden birthday theme preference? let's keep simple)
+      const themeKey = bday ? 'birthday' : (user?.theme || 'nebula');
+      const theme = THEMES[themeKey];
+      const design = user?.design || 'galaxy';
 
       useEffect(() => {
         if (user) localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
-        setQuote(txt.quotes[Math.floor(Math.random() * txt.quotes.length)]);
-      }, [user, lang]);
+      }, [user]);
 
-      // Efecto Confetti Cumpleaños
+      // Confetti
       useEffect(() => {
         if (bday) {
            const end = Date.now() + 3000;
+           const colors = [theme.hex.current, '#ffffff'];
            (function frame() {
-             confetti({ particleCount: 3, angle: 60, spread: 55, origin: { x: 0 }, colors: ['#ff0', '#f0f'] });
-             confetti({ particleCount: 3, angle: 120, spread: 55, origin: { x: 1 }, colors: ['#0ff', '#f00'] });
+             confetti({ particleCount: 3, angle: 60, spread: 55, origin: { x: 0 }, colors });
+             confetti({ particleCount: 3, angle: 120, spread: 55, origin: { x: 1 }, colors });
              if (Date.now() < end) requestAnimationFrame(frame);
            }());
         }
@@ -279,126 +245,134 @@
 
       if (!user) return <Setup onSave={setUser} t={txt} />;
 
+      // Insights dinámicos
+      const globalTxt = lang==='es' ? `De ${fmt(stats.popStart)} a ${fmt(stats.popNow)} humanos.` : `From ${fmt(stats.popStart)} to ${fmt(stats.popNow)} humans.`;
+      const cosmicTxt = lang==='es' ? `Has recorrido ${fmt(stats.kmSun)} km orbitando el Sol.` : `You traveled ${fmt(stats.kmSun)} km around Sun.`;
+
       return (
-        <div className="min-h-screen relative text-white transition-colors duration-1000 overflow-hidden bg-black selection:bg-white/20">
+        <div className="min-h-screen relative text-white selection:bg-white/20 transition-colors duration-1000 overflow-hidden bg-black">
           
-          {/* BACKGROUND DINÁMICO */}
-          <div className="blob-cont">
-             <div className="blob anim-float" style={{background:theme.bg1, width:'90vw', height:'90vw', top:'-20%', left:'-20%'}}></div>
-             <div className="blob anim-float" style={{background:theme.bg2, width:'90vw', height:'90vw', bottom:'-20%', right:'-20%', animationDelay:'-8s'}}></div>
-             <div className="absolute inset-0 bg-black/50 backdrop-blur-[40px]"></div>
+          {/* FONDOS AMBIENTALES */}
+          <div className="fixed inset-0 z-0">
+             <div className="absolute top-[-20%] left-[-20%] w-[90vw] h-[90vw] rounded-full blur-[120px] opacity-40 animate-float" style={{background: theme.bg1}}></div>
+             <div className="absolute bottom-[-20%] right-[-20%] w-[90vw] h-[90vw] rounded-full blur-[120px] opacity-40 animate-float" style={{background: theme.bg2, animationDelay: '-10s'}}></div>
+             <div className="absolute inset-0 bg-black/40 backdrop-blur-[50px]"></div>
           </div>
 
-          {/* NAV HEADER */}
-          <header className="px-6 pt-12 pb-4 flex justify-between items-center max-w-lg mx-auto relative z-20">
-             <div>
-               <h1 className="text-4xl font-black tracking-tighter drop-shadow-2xl" style={{textShadow:`0 0 30px ${theme.bg1}`}}>{user.name}</h1>
-               <p className={`text-xs font-bold uppercase tracking-widest ${theme.text} opacity-80`}>
-                 {bday ? "🎂 " + txt.bday_btn : `${stats.years} Años • ${user.design}`}
-               </p>
-             </div>
-             <button onClick={()=>setSettings(true)} className="p-3 glass rounded-full active:scale-90 transition-transform hover:bg-white/10">
-               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-             </button>
-          </header>
-
-          <main className="px-4 pb-20 max-w-lg mx-auto space-y-6 relative z-10">
+          <div className="relative z-10 max-w-lg mx-auto px-6 pb-20 pt-10 min-h-screen flex flex-col">
             
-            {/* MENSAJE CUMPLEAÑOS */}
+            {/* HEADER */}
+            <header className="flex justify-between items-center mb-8">
+               <div>
+                 <h1 className="text-3xl font-bold tracking-tighter drop-shadow-xl">{user.name}</h1>
+                 <p className="text-xs font-bold uppercase tracking-[0.2em] opacity-60 flex items-center gap-2">
+                   {stats.years} Años <span className="w-1 h-1 bg-white rounded-full"></span> {bday ? "🎂" : "MEMENTO"}
+                 </p>
+               </div>
+               <button onClick={()=>setSettings(true)} className="w-10 h-10 glass-panel rounded-full flex items-center justify-center hover:bg-white/10 active:scale-95 transition-all">
+                 <svg className="w-5 h-5 opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>
+               </button>
+            </header>
+
+            {/* MAIN CARD */}
+            <div className="glass-panel rounded-[2rem] p-1 relative overflow-hidden shadow-2xl mb-6 group">
+               {/* Visualizador */}
+               <div className="bg-black/20 rounded-[1.8rem] p-4 min-h-[350px] flex items-center justify-center relative overflow-hidden">
+                  <div className="absolute inset-0 opacity-10 pointer-events-none text-[15rem] font-bold flex items-center justify-center select-none" style={{color: theme.accent}}>
+                    {stats.years}
+                  </div>
+                  <div className="w-full relative z-10">
+                    {design === 'galaxy' ? <GalaxyVisualizer stats={stats} theme={theme} /> : <GridVisualizer stats={stats} theme={theme} />}
+                  </div>
+               </div>
+
+               {/* Footer Card */}
+               <div className="px-6 py-4 flex justify-between items-end">
+                  <div>
+                    <div className="text-3xl font-bold tracking-tighter glow-text" style={{color: theme.hex.current}}>{fmt(stats.lived)}</div>
+                    <div className="text-[10px] uppercase font-bold tracking-widest opacity-40">{txt.weeks_lived}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-2xl font-bold tracking-tighter opacity-30">{fmt(stats.left)}</div>
+                    <div className="text-[10px] uppercase font-bold tracking-widest opacity-30">{txt.weeks_left}</div>
+                  </div>
+               </div>
+            </div>
+
+            {/* BDAY MESSAGE */}
             {bday && (
-              <div className="glass p-6 rounded-3xl text-center border-yellow-400/30 shadow-[0_0_50px_rgba(253,224,71,0.2)]">
-                 <h2 className="text-xl font-bold text-yellow-300 mb-1">{txt.bday_title} {user.name}!</h2>
-                 <p className="text-sm opacity-90 leading-relaxed">{txt.bday_msg}</p>
+              <div className="glass-panel p-6 rounded-2xl mb-6 border border-yellow-500/30 bg-gradient-to-r from-pink-500/10 to-yellow-500/10">
+                 <h2 className="text-lg font-bold text-yellow-300 mb-1">🎉 {txt.bday_title} {user.name}</h2>
+                 <p className="text-sm opacity-80">{txt.bday_msg}</p>
               </div>
             )}
 
-            {/* VISUALIZADOR MAIN */}
-            <div className="glass rounded-[2.5rem] p-6 relative overflow-hidden shadow-2xl">
-              <div className="absolute -top-4 -right-4 text-[12rem] font-black opacity-[0.03] pointer-events-none select-none">{stats.years}</div>
-              
-              <div className="relative z-10 py-4 min-h-[340px] flex items-center justify-center">
-                 <Visualizer type={user.design} stats={stats} theme={theme} />
-              </div>
-
-              <div className="flex justify-between items-end border-t border-white/10 pt-4 relative z-10">
-                <div>
-                  <div className="text-3xl font-black tracking-tighter">{fmt(stats.lived)}</div>
-                  <div className="text-[10px] uppercase tracking-widest opacity-50">{txt.weeks_lived}</div>
-                </div>
-                <div className="text-right">
-                  <div className="text-3xl font-black tracking-tighter opacity-30">{fmt(stats.left)}</div>
-                  <div className="text-[10px] uppercase tracking-widest opacity-50">{txt.weeks_left}</div>
-                </div>
-              </div>
-            </div>
-
-            {/* BARRA PROGRESO */}
-            <div className="glass rounded-3xl p-6">
+            {/* PROGRESS BAR */}
+            <div className="glass-panel rounded-2xl p-5 mb-6">
                <div className="flex justify-between items-center mb-3">
-                 <span className="text-xs font-bold uppercase tracking-widest opacity-60">{txt.progress}</span>
-                 <span className="text-xl font-black" style={{color:theme.accent}}>{stats.pct}%</span>
+                 <span className="text-xs font-bold uppercase tracking-widest opacity-50">{txt.progress}</span>
+                 <span className="text-lg font-bold">{stats.pct}%</span>
                </div>
-               <div className="w-full h-3 bg-white/5 rounded-full overflow-hidden">
-                 <div className="h-full transition-all duration-1000 shadow-[0_0_20px_currentColor]" 
-                      style={{width:`${stats.pct}%`, backgroundColor:theme.accent, color:theme.accent}} />
+               <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+                 <div className="h-full transition-all duration-1000 shadow-[0_0_15px_currentColor]" 
+                      style={{width:`${stats.pct}%`, backgroundColor: theme.accent, color: theme.accent}}></div>
                </div>
             </div>
 
-            {/* STATS GRID ANIMADO */}
-            <div className="grid grid-cols-2 gap-3">
-               <StatCard icon={<span className="anim-heart text-red-500 text-2xl drop-shadow-lg">❤️</span>} val={fmt(stats.heart)} label={txt.heart} />
-               <StatCard icon={<span className="anim-breathe text-cyan-300 text-2xl drop-shadow-lg">🌬️</span>} val={fmt(stats.breath)} label={txt.breath} />
-               <StatCard icon={<span className="anim-sway text-purple-300 text-2xl drop-shadow-lg">😴</span>} val={fmt(stats.sleep)+"h"} label={txt.sleep} />
-               <StatCard icon={<span className="anim-spin text-green-400 text-2xl drop-shadow-lg">🌍</span>} val={stats.orbits} label={txt.orbit} />
+            {/* STATS GRID */}
+            <div className="grid grid-cols-2 gap-3 mb-6">
+              <StatCard icon="❤️" val={fmt(stats.heart)} label={txt.heart} />
+              <StatCard icon="🌬️" val={fmt(stats.breath)} label={txt.breath} />
+              <StatCard icon="😴" val={fmt(stats.sleep)+"h"} label={txt.sleep} />
+              <StatCard icon="🪐" val={stats.orbits} label={txt.orbit} />
             </div>
 
-            {/* CONTEXTO DINÁMICO */}
-            <div className="space-y-3">
-               <ContextCard title={txt.global} body={lang==='es' ? `Desde tu nacimiento, la población mundial creció de ${fmt(stats.popStart)} a ${fmt(stats.popNow)}.` : `Population grew from ${fmt(stats.popStart)} to ${fmt(stats.popNow)}.`} accent={theme.accent} />
-               <ContextCard title={txt.cosmic} body={lang==='es' ? `Has viajado ${fmt(stats.kmSun)} km alrededor del Sol.` : `You traveled ${fmt(stats.kmSun)} km around the Sun.`} accent={theme.accent} />
+            {/* CONTEXT */}
+            <div className="space-y-3 opacity-80">
+               <ContextCard title={txt.global} text={globalTxt} theme={theme} />
+               <ContextCard title={txt.cosmic} text={cosmicTxt} theme={theme} />
             </div>
 
-            {/* QUOTE */}
-            <div className="py-6 text-center opacity-60">
-               <p className="text-xs font-serif italic max-w-xs mx-auto text-glow">"{quote}"</p>
-            </div>
+          </div>
 
-          </main>
-
-          {/* SETTINGS PANEL */}
+          {/* SETTINGS MODAL */}
           {settings && (
-            <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-xl p-4" onClick={()=>setSettings(false)}>
-               <div className="w-full max-w-md bg-[#0a0a0a] border border-white/10 rounded-[2.5rem] p-8 shadow-2xl max-h-[85vh] overflow-y-auto hide-scrollbar" onClick={e=>e.stopPropagation()}>
+            <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-xl p-4 animate-[float-slow_0.5s_ease-out]" onClick={()=>setSettings(false)}>
+               <div className="w-full max-w-md bg-[#0a0a0a] border border-white/10 rounded-[2rem] p-8 shadow-2xl max-h-[85vh] overflow-y-auto hide-scrollbar" onClick={e=>e.stopPropagation()}>
                   <div className="flex justify-between items-center mb-8">
-                    <h2 className="text-2xl font-bold">{txt.settings}</h2>
+                    <h2 className="text-xl font-bold tracking-widest uppercase">{txt.settings}</h2>
                     <button onClick={()=>setSettings(false)} className="opacity-50 text-xl">✕</button>
                   </div>
                   
-                  <SettingGroup title={txt.lang}>
+                  <SettingSection title={txt.lang}>
                     <div className="flex gap-2">
                        {['es','en'].map(l => (
-                         <button key={l} onClick={()=>setUser({...user, lang:l})} className={`flex-1 py-3 rounded-xl border font-bold ${lang===l?'bg-white text-black border-white':'border-white/10 text-white/40'}`}>{l.toUpperCase()}</button>
+                         <button key={l} onClick={()=>setUser({...user, lang:l})} className={`flex-1 py-3 rounded-xl border text-sm font-bold transition-all ${user.lang===l?'bg-white text-black border-white':'border-white/10 text-white/40'}`}>{l.toUpperCase()}</button>
                        ))}
                     </div>
-                  </SettingGroup>
+                  </SettingSection>
 
-                  <SettingGroup title={txt.theme}>
-                    <div className="grid grid-cols-2 gap-2">
-                       {Object.keys(THEMES).filter(k=>k!=='birthday').map(k => (
-                         <button key={k} onClick={()=>setUser({...user, theme:k})} className={`py-3 rounded-xl border text-xs font-bold ${user.theme===k?'bg-white text-black border-white':'border-white/10 text-white/40'}`}>{THEMES[k].name}</button>
-                       ))}
-                    </div>
-                  </SettingGroup>
-
-                  <SettingGroup title={txt.design}>
+                  <SettingSection title={txt.theme}>
                     <div className="grid grid-cols-3 gap-2">
-                       {['grid','spiral','stars'].map(d => (
-                         <button key={d} onClick={()=>setUser({...user, design:d})} className={`py-3 rounded-xl border text-xs uppercase font-bold ${user.design===d?'bg-white text-black border-white':'border-white/10 text-white/40'}`}>{d}</button>
+                       {Object.keys(THEMES).filter(k=>k!=='birthday').map(k => (
+                         <button key={k} onClick={()=>setUser({...user, theme:k})} 
+                                 className={`py-3 rounded-xl border text-xs font-bold transition-all ${user.theme===k?'bg-white text-black border-white':'border-white/10 text-white/40'}`}
+                                 style={{color: user.theme===k ? '#000' : THEMES[k].accent}}>
+                            {THEMES[k].name}
+                         </button>
                        ))}
                     </div>
-                  </SettingGroup>
+                  </SettingSection>
+
+                  <SettingSection title={txt.design}>
+                    <div className="grid grid-cols-2 gap-2">
+                       {['galaxy','grid'].map(d => (
+                         <button key={d} onClick={()=>setUser({...user, design:d})} className={`py-3 rounded-xl border text-xs uppercase font-bold transition-all ${user.design===d?'bg-white text-black border-white':'border-white/10 text-white/40'}`}>{d}</button>
+                       ))}
+                    </div>
+                  </SettingSection>
                   
-                  <button onClick={()=>{localStorage.removeItem(STORAGE_KEY); window.location.reload()}} className="w-full mt-8 py-4 text-red-400 font-bold bg-red-500/10 rounded-xl hover:bg-red-500/20 transition-colors">{txt.reset}</button>
+                  <button onClick={()=>{localStorage.removeItem(STORAGE_KEY); window.location.reload()}} className="w-full mt-8 py-4 text-red-400 font-bold bg-red-500/10 rounded-xl hover:bg-red-500/20 transition-colors text-sm uppercase tracking-widest">{txt.reset}</button>
                </div>
             </div>
           )}
@@ -412,21 +386,21 @@
        const [d, sd] = useState("");
        return (
          <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-black relative overflow-hidden">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_#1a1a1a_0%,_#000_100%)]"></div>
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_#222_0%,_#000_100%)]"></div>
             <div className="relative z-10 w-full max-w-sm text-center">
-               <div className="w-24 h-24 bg-white text-black rounded-[2rem] mx-auto mb-6 flex items-center justify-center text-5xl shadow-[0_0_50px_rgba(255,255,255,0.2)]">⏳</div>
-               <h1 className="text-4xl font-black mb-2">{t.welcome}</h1>
+               <div className="w-20 h-20 bg-white text-black rounded-[2rem] mx-auto mb-6 flex items-center justify-center text-4xl shadow-[0_0_50px_rgba(255,255,255,0.2)]">⏳</div>
+               <h1 className="text-3xl font-bold mb-2 tracking-tight">{t.welcome}</h1>
                <p className="text-white/50 mb-10">{t.sub}</p>
-               <div className="glass p-8 rounded-[2.5rem] space-y-4 text-left shadow-2xl border-t border-white/10">
+               <div className="glass-panel p-8 rounded-[2rem] space-y-4 text-left">
                   <div>
                     <label className="text-[10px] uppercase font-bold tracking-widest opacity-50 ml-1">{t.setup_name}</label>
-                    <input className="w-full bg-white/5 border border-white/10 p-4 rounded-xl mt-2 text-white outline-none focus:border-white/50 focus:bg-white/10 transition-all font-bold" onChange={e=>sn(e.target.value)} />
+                    <input className="w-full bg-white/5 border border-white/10 p-4 rounded-xl mt-2 text-white outline-none focus:border-white/50 focus:bg-white/10 transition-all font-bold placeholder-white/20" onChange={e=>sn(e.target.value)} />
                   </div>
                   <div>
                     <label className="text-[10px] uppercase font-bold tracking-widest opacity-50 ml-1">{t.setup_dob}</label>
                     <input type="date" className="w-full bg-white/5 border border-white/10 p-4 rounded-xl mt-2 text-white outline-none focus:border-white/50 focus:bg-white/10 transition-all" onChange={e=>sd(e.target.value)} />
                   </div>
-                  <button onClick={()=>n&&d&&onSave({name:n, dob:d, lang:'es', theme:'neon', design:'grid'})} disabled={!n||!d} className="w-full py-4 bg-white text-black font-bold rounded-xl mt-4 shadow-[0_0_20px_rgba(255,255,255,0.3)] active:scale-95 transition-all disabled:opacity-50 disabled:shadow-none">{t.btn_start}</button>
+                  <button onClick={()=>n&&d&&onSave({name:n, dob:d, lang:'es', theme:'nebula', design:'galaxy'})} disabled={!n||!d} className="w-full py-4 bg-white text-black font-bold rounded-xl mt-4 active:scale-95 transition-all disabled:opacity-50">{t.btn_start}</button>
                </div>
             </div>
          </div>
@@ -434,21 +408,21 @@
     }
 
     const StatCard = ({icon, val, label}) => (
-      <div className="glass p-4 rounded-2xl flex flex-col items-center justify-center text-center hover:bg-white/5 transition-colors">
-         <div className="mb-2">{icon}</div>
+      <div className="glass-panel p-4 rounded-2xl flex flex-col items-center justify-center text-center hover:bg-white/5 transition-colors">
+         <div className="text-xl mb-1">{icon}</div>
          <div className="text-lg font-bold leading-none tracking-tight">{val}</div>
          <div className="text-[9px] uppercase tracking-wider opacity-40 mt-1">{label}</div>
       </div>
     );
 
-    const ContextCard = ({title, body, accent}) => (
-      <div className="glass p-5 rounded-2xl border-l-4" style={{borderLeftColor:accent}}>
+    const ContextCard = ({title, text, theme}) => (
+      <div className="glass-panel p-5 rounded-2xl border-l-2" style={{borderLeftColor: theme.accent}}>
          <h4 className="text-[10px] uppercase font-bold tracking-widest opacity-40 mb-1">{title}</h4>
-         <p className="text-sm font-medium opacity-80 leading-relaxed">{body}</p>
+         <p className="text-sm font-medium opacity-80 leading-relaxed">{text}</p>
       </div>
     );
 
-    const SettingGroup = ({title, children}) => (
+    const SettingSection = ({title, children}) => (
       <div className="mb-6">
         <h3 className="text-[10px] uppercase font-bold tracking-widest opacity-40 mb-3">{title}</h3>
         {children}
